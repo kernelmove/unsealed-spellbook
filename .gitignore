@@ -1,0 +1,11 @@
+/.build/
+/.swiftpm/
+/DerivedData/
+/dist/
+/Design/qa*/
+/design-qa.md
+
+.DS_Store
+*.dmg
+*.xcuserstate
+xcuserdata/
