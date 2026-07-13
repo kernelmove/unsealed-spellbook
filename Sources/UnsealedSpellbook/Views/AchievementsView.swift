@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UnsealedSpellbookCore
+import UnsealedSpellbookLanguage
 
 enum AchievementPresentation {
   static let tierOrder: [BadgeTier] = [.diamond, .gold, .silver, .bronze]
@@ -33,9 +34,17 @@ enum AchievementPresentation {
     achievements.firstIndex { $0.id == selectedID }
   }
 
-  static func statusText(for achievement: Achievement, isUnlocked: Bool) -> String {
-    if achievement.availability == .comingSoon { return "未开放" }
-    return isUnlocked ? "已解锁" : "未解锁"
+  static func statusText(
+    for achievement: Achievement,
+    isUnlocked: Bool,
+    language: AppLanguage
+  ) -> String {
+    if achievement.availability == .comingSoon {
+      return language.text(.achievementStatusUnavailable)
+    }
+    return language.text(
+      isUnlocked ? .achievementStatusUnlocked : .achievementStatusLocked
+    )
   }
 
   static func statusSystemImage(for achievement: Achievement, isUnlocked: Bool) -> String {
@@ -75,6 +84,7 @@ enum AchievementPresentation {
 
 struct AchievementsView: View {
   let analytics: UsageAnalytics
+  @Environment(\.appLanguage) private var language
 
   @AppStorage(AppPreferences.acknowledgedAchievementsKey)
   private var acknowledgedAchievementIDs = ""
@@ -103,40 +113,44 @@ struct AchievementsView: View {
         VStack(alignment: .leading, spacing: 16) {
           VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-              Text("徽章与总览")
+              Text(language.text(.achievementsTitle))
                 .font(.title2.weight(.semibold))
-              Text("从稀有到普通，点亮你的 AI 工具旅程")
+              Text(language.text(.achievementsSubtitle))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             }
 
             LazyVGrid(columns: summaryColumns, spacing: 10) {
               SummaryMetric(
-                title: "累计 Token",
-                value: overview.totalTokens.formatted(.number.notation(.compactName)),
-                accessibilityValue: overview.totalTokens.formatted(),
+                title: language.text(.achievementsTotalTokens),
+                value: overview.totalTokens.compactTokenCount(language: language),
+                accessibilityValue: overview.totalTokens.formatted(
+                  .number.locale(language.locale)
+                ),
                 systemImage: "sum",
                 color: SpellbookDesign.accent
               )
               SummaryMetric(
-                title: "活跃天数",
+                title: language.text(.achievementsActiveDays),
                 value: "\(overview.activeDays)",
-                accessibilityValue: "\(overview.activeDays) 天",
+                accessibilityValue: language.text(.dayCountFormat, overview.activeDays),
                 systemImage: "calendar",
                 color: SpellbookDesign.metricBlue
               )
               SummaryMetric(
-                title: "当前连击",
-                value: "\(overview.currentStreak) 天",
-                accessibilityValue: "\(overview.currentStreak) 天",
+                title: language.text(.achievementsCurrentStreak),
+                value: language.text(.dayCountFormat, overview.currentStreak),
+                accessibilityValue: language.text(.dayCountFormat, overview.currentStreak),
                 systemImage: "flame.fill",
                 color: SpellbookDesign.metricPurple
               )
               SummaryMetric(
-                title: "缓存命中",
-                value: overview.cacheHitRate.formatted(.percent.precision(.fractionLength(0))),
+                title: language.text(.achievementsCacheHit),
+                value: overview.cacheHitRate.formatted(
+                  .percent.precision(.fractionLength(0)).locale(language.locale)
+                ),
                 accessibilityValue: overview.cacheHitRate.formatted(
-                  .percent.precision(.fractionLength(0))
+                  .percent.precision(.fractionLength(0)).locale(language.locale)
                 ),
                 systemImage: "bolt.fill",
                 color: SpellbookDesign.success
@@ -147,12 +161,18 @@ struct AchievementsView: View {
           .spellbookPanel()
 
           HStack(alignment: .firstTextBaseline) {
-            Text("徽章收藏")
+            Text(language.text(.achievementsCollection))
               .font(.headline)
             Spacer()
-            Text("已点亮 \(achievements.filter(isEffectivelyUnlocked).count) / \(achievements.count)")
-              .font(.caption)
-              .foregroundStyle(.secondary)
+            Text(
+              language.text(
+                .achievementsLitCountFormat,
+                achievements.filter(isEffectivelyUnlocked).count,
+                achievements.count
+              )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
           }
 
           ForEach(AchievementPresentation.tierOrder, id: \.rawValue) { tier in
@@ -256,6 +276,7 @@ private struct TierAchievementCollection: View {
   let unlockedIDs: Set<String>
   let unlockRecordsByID: [String: AchievementUnlockRecord]
   @Binding var isExpanded: Bool
+  @Environment(\.appLanguage) private var language
 
   private let columns = [GridItem(.adaptive(minimum: 170), spacing: 12)]
 
@@ -272,10 +293,19 @@ private struct TierAchievementCollection: View {
             .accessibilityHidden(true)
 
           VStack(alignment: .leading, spacing: 2) {
-            Text("\(tier.displayName)级收藏")
-              .font(.subheadline.weight(.semibold))
             Text(
-              "\(achievements.filter { unlockedIDs.contains($0.id) }.count) / \(achievements.count) 已点亮"
+              language.text(
+                .tierCollectionFormat,
+                tier.displayName(language: language)
+              )
+            )
+            .font(.subheadline.weight(.semibold))
+            Text(
+              language.text(
+                .tierLitCountFormat,
+                achievements.filter { unlockedIDs.contains($0.id) }.count,
+                achievements.count
+              )
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -293,9 +323,20 @@ private struct TierAchievementCollection: View {
       }
       .buttonStyle(.plain)
       .padding(14)
-      .accessibilityLabel("\(tier.displayName)级收藏")
-      .accessibilityValue(isExpanded ? "已展开" : "已折叠")
-      .accessibilityHint(isExpanded ? "折叠徽章列表" : "展开徽章列表")
+      .accessibilityLabel(
+        language.text(
+          .tierCollectionFormat,
+          tier.displayName(language: language)
+        )
+      )
+      .accessibilityValue(
+        language.text(isExpanded ? .accessibilityExpanded : .accessibilityCollapsed)
+      )
+      .accessibilityHint(
+        language.text(
+          isExpanded ? .accessibilityCollapseBadges : .accessibilityExpandBadges
+        )
+      )
 
       if isExpanded {
         Divider()
@@ -356,6 +397,7 @@ private struct AchievementCard: View {
   let achievement: Achievement
   let isUnlocked: Bool
   let unlockRecord: AchievementUnlockRecord?
+  @Environment(\.appLanguage) private var language
   @State private var isShowingDetails = false
 
   private var displayColor: Color {
@@ -363,7 +405,11 @@ private struct AchievementCard: View {
   }
 
   private var statusText: String {
-    AchievementPresentation.statusText(for: achievement, isUnlocked: isUnlocked)
+    AchievementPresentation.statusText(
+      for: achievement,
+      isUnlocked: isUnlocked,
+      language: language
+    )
   }
 
   var body: some View {
@@ -378,7 +424,7 @@ private struct AchievementCard: View {
         )
         .accessibilityHidden(true)
 
-        Text(achievement.title)
+        Text(achievement.localizedTitle(language: language))
           .font(.subheadline.weight(.semibold))
           .foregroundStyle(.primary)
           .multilineTextAlignment(.center)
@@ -405,7 +451,12 @@ private struct AchievementCard: View {
       .contentShape(RoundedRectangle(cornerRadius: 14))
     }
     .buttonStyle(.plain)
-    .help("查看 \(achievement.title) 详情")
+    .help(
+      language.text(
+        .viewAchievementDetailsFormat,
+        achievement.localizedTitle(language: language)
+      )
+    )
     .popover(isPresented: $isShowingDetails) {
       AchievementDetailPopover(
         achievement: achievement,
@@ -413,9 +464,9 @@ private struct AchievementCard: View {
         unlockRecord: unlockRecord
       )
     }
-    .accessibilityLabel(achievement.title)
+    .accessibilityLabel(achievement.localizedTitle(language: language))
     .accessibilityValue(statusText)
-    .accessibilityHint("打开徽章详情")
+    .accessibilityHint(language.text(.accessibilityOpenAchievementDetails))
   }
 }
 
@@ -423,9 +474,14 @@ struct AchievementDetailPopover: View {
   let achievement: Achievement
   let isUnlocked: Bool
   let unlockRecord: AchievementUnlockRecord?
+  @Environment(\.appLanguage) private var language
 
   private var statusText: String {
-    AchievementPresentation.statusText(for: achievement, isUnlocked: isUnlocked)
+    AchievementPresentation.statusText(
+      for: achievement,
+      isUnlocked: isUnlocked,
+      language: language
+    )
   }
 
   private var progressValue: Double {
@@ -433,16 +489,24 @@ struct AchievementDetailPopover: View {
   }
 
   private var progressText: String {
-    if achievement.availability == .comingSoon { return "尚未开放" }
-    if isUnlocked { return unlockRecord?.unlockValue ?? "已完成" }
-    return achievement.progressLabel
+    if achievement.availability == .comingSoon {
+      return language.text(.achievementProgressUnavailable)
+    }
+    if isUnlocked, achievement.progressMetric == .unavailable {
+      return language.text(.achievementProgressCompleted)
+    }
+    return achievement.localizedProgress(language: language)
   }
 
   private var unlockDateText: String {
     guard let unlockedAt = unlockRecord?.unlockedAt else {
-      return isUnlocked ? "暂无记录" : "尚未解锁"
+      return language.text(
+        isUnlocked ? .achievementNoUnlockRecord : .achievementNotUnlocked
+      )
     }
-    return unlockedAt.formatted(date: .long, time: .omitted)
+    return unlockedAt.formatted(
+      Date.FormatStyle(date: .long, time: .omitted).locale(language.locale)
+    )
   }
 
   var body: some View {
@@ -454,20 +518,25 @@ struct AchievementDetailPopover: View {
             isUnlocked: true,
             size: 96
           )
-          Text("解锁后预览")
+          Text(language.text(.achievementUnlockedPreview))
             .font(.caption2)
             .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
 
         VStack(alignment: .leading, spacing: 7) {
-          Text(achievement.title)
+          Text(achievement.localizedTitle(language: language))
             .font(.title3.weight(.semibold))
             .fixedSize(horizontal: false, vertical: true)
 
-          Text("\(achievement.tier.displayName)级徽章")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(achievement.tier.tintColor)
+          Text(
+            language.text(
+              .achievementTierBadgeFormat,
+              achievement.tier.displayName(language: language)
+            )
+          )
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(achievement.tier.tintColor)
 
           Label(
             statusText,
@@ -487,7 +556,7 @@ struct AchievementDetailPopover: View {
 
       VStack(alignment: .leading, spacing: 7) {
         HStack {
-          Text("进度")
+          Text(language.text(.achievementProgress))
             .font(.subheadline.weight(.semibold))
           Spacer()
           Text(progressText)
@@ -498,21 +567,21 @@ struct AchievementDetailPopover: View {
         ProgressView(value: progressValue)
           .progressViewStyle(.linear)
           .tint(isUnlocked ? achievement.tier.tintColor : SpellbookDesign.muted)
-          .accessibilityLabel("解锁进度")
+          .accessibilityLabel(language.text(.accessibilityUnlockProgress))
           .accessibilityValue(progressText)
       }
 
       VStack(alignment: .leading, spacing: 5) {
-        Text("说明")
+        Text(language.text(.achievementDescription))
           .font(.subheadline.weight(.semibold))
-        Text(achievement.detail)
+        Text(achievement.localizedDetail(language: language))
           .font(.subheadline)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
 
       HStack(alignment: .firstTextBaseline) {
-        Text("解锁日期")
+        Text(language.text(.achievementUnlockDate))
           .font(.subheadline.weight(.semibold))
         Spacer()
         Text(unlockDateText)
@@ -609,6 +678,7 @@ private enum BadgeArtworkStore {
 struct NewAchievementModal: View {
   let achievements: [Achievement]
   let dismiss: () -> Void
+  @Environment(\.appLanguage) private var language
   @State private var selectedAchievementID: String?
 
   init(achievements: [Achievement], dismiss: @escaping () -> Void) {
@@ -622,7 +692,7 @@ struct NewAchievementModal: View {
   var body: some View {
     VStack(spacing: 10) {
       VStack(spacing: 12) {
-        Label("新徽章已点亮", systemImage: "sparkles")
+        Label(language.text(.newAchievementUnlocked), systemImage: "sparkles")
           .font(.headline)
           .foregroundStyle(SpellbookDesign.accent)
 
@@ -636,15 +706,20 @@ struct NewAchievementModal: View {
                   size: 112
                 )
 
-                Text(achievement.title)
+                Text(achievement.localizedTitle(language: language))
                   .font(.title3.weight(.semibold))
                   .lineLimit(1)
 
-                Text("\(achievement.tier.displayName)级徽章")
-                  .font(.caption.weight(.semibold))
-                  .foregroundStyle(achievement.tier.tintColor)
+                Text(
+                  language.text(
+                    .achievementTierBadgeFormat,
+                    achievement.tier.displayName(language: language)
+                  )
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(achievement.tier.tintColor)
 
-                Text(achievement.detail)
+                Text(achievement.localizedDetail(language: language))
                   .font(.caption)
                   .foregroundStyle(.secondary)
                   .multilineTextAlignment(.center)
@@ -664,11 +739,11 @@ struct NewAchievementModal: View {
           width: AchievementPresentation.popupWidth - 32,
           height: AchievementPresentation.popupCarouselHeight
         )
-        .accessibilityLabel("新徽章轮播")
+        .accessibilityLabel(language.text(.accessibilityNewAchievementCarousel))
         .accessibilityValue(carouselAccessibilityValue)
 
         Button(action: dismiss) {
-          Text("收下徽章")
+          Text(language.text(.actionAcceptAchievement))
             .font(.subheadline.weight(.semibold))
             .frame(maxWidth: .infinity, minHeight: 34)
             .contentShape(Rectangle())
@@ -676,7 +751,7 @@ struct NewAchievementModal: View {
         .buttonStyle(.plain)
         .foregroundStyle(.white)
         .background(SpellbookDesign.accent, in: Capsule())
-        .accessibilityLabel("收下新徽章")
+        .accessibilityLabel(language.text(.accessibilityAcceptNewAchievement))
       }
       .padding(16)
       .frame(width: AchievementPresentation.popupWidth)
@@ -703,7 +778,7 @@ struct NewAchievementModal: View {
       .foregroundStyle(.white)
       .background(Color.black.opacity(0.28), in: Circle())
       .overlay { Circle().stroke(Color.white.opacity(0.9), lineWidth: 1.5) }
-      .accessibilityLabel("关闭新徽章提示")
+      .accessibilityLabel(language.text(.accessibilityCloseNewAchievement))
     }
     .accessibilityElement(children: .contain)
   }
@@ -714,14 +789,19 @@ struct NewAchievementModal: View {
         in: achievements,
         selectedID: selectedAchievementID
       )
-    else { return "共 \(achievements.count) 枚" }
-    return "第 \(index + 1) 枚，共 \(achievements.count) 枚"
+    else { return language.text(.achievementCountFormat, achievements.count) }
+    return language.text(
+      .achievementCarouselPositionFormat,
+      index + 1,
+      achievements.count
+    )
   }
 }
 
 private struct AchievementPageDots: View {
   let achievements: [Achievement]
   @Binding var selection: String?
+  @Environment(\.appLanguage) private var language
 
   var body: some View {
     HStack(spacing: 2) {
@@ -744,7 +824,13 @@ private struct AchievementPageDots: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(achievement.title)，第 \(index + 1) 页")
+        .accessibilityLabel(
+          language.text(
+            .achievementPageFormat,
+            achievement.localizedTitle(language: language),
+            index + 1
+          )
+        )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
       }
     }

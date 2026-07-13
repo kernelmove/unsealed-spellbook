@@ -1,6 +1,7 @@
 import Charts
 import SwiftUI
 import UnsealedSpellbookCore
+import UnsealedSpellbookLanguage
 
 struct DetailDashboardView: View {
   let analytics: UsageAnalytics
@@ -36,6 +37,7 @@ struct DetailDashboardView: View {
 private struct TotalUsagePanel: View {
   let analytics: UsageAnalytics
   @Binding var period: UsagePeriod
+  @Environment(\.appLanguage) private var language
 
   var body: some View {
     let snapshot = analytics.snapshot(for: period)
@@ -44,14 +46,14 @@ private struct TotalUsagePanel: View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(alignment: .top, spacing: 16) {
         VStack(alignment: .leading, spacing: 7) {
-          Text("总 Token")
+          Text(language.text(.overviewTotalTokens))
             .font(.system(size: 15, weight: .semibold))
-          Text(snapshot.total.total.compactTokenCount)
+          Text(snapshot.total.total.compactTokenCount(language: language))
             .font(.system(size: 48, weight: .semibold))
             .tracking(-1.9)
             .monospacedDigit()
             .contentTransition(.numericText())
-          Text("所选周期内全部工具")
+          Text(language.text(.overviewAllTools))
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -61,7 +63,7 @@ private struct TotalUsagePanel: View {
         PeriodTabs(selection: $period)
       }
 
-      Text("工具使用占比")
+      Text(language.text(.overviewToolUsageShare))
         .font(.system(size: 15, weight: .semibold))
         .padding(.top, 28)
         .padding(.bottom, 12)
@@ -82,7 +84,7 @@ private struct TotalUsagePanel: View {
         .padding(.bottom, 18)
 
       HStack(alignment: .firstTextBaseline) {
-        Text("按日趋势")
+        Text(language.text(.overviewDailyTrend))
           .font(.system(size: 15, weight: .semibold))
         Spacer()
         Text(periodCaption)
@@ -106,9 +108,12 @@ private struct TotalUsagePanel: View {
 
   private var periodCaption: String {
     if period == .today {
-      return "截至 \(analytics.now.formatted(.dateTime.hour().minute()))"
+      return language.text(
+        .overviewAsOfFormat,
+        analytics.now.formatted(.dateTime.hour().minute().locale(language.locale))
+      )
     }
-    return period.displayName
+    return period.displayName(language: language)
   }
 }
 
@@ -116,6 +121,7 @@ private struct ToolDetailPanel: View {
   let analytics: UsageAnalytics
   @Binding var provider: AIProvider
   let period: UsagePeriod
+  @Environment(\.appLanguage) private var language
 
   private let columns = [
     GridItem(.flexible(), spacing: 10),
@@ -126,7 +132,7 @@ private struct ToolDetailPanel: View {
     let snapshot = analytics.snapshot(for: period, provider: provider)
 
     VStack(alignment: .leading, spacing: 14) {
-      Text("工具详情")
+      Text(language.text(.toolDetails))
         .font(.system(size: 18, weight: .semibold))
 
       SpellbookSegmentedControl(
@@ -135,24 +141,28 @@ private struct ToolDetailPanel: View {
         horizontalPadding: 3
       ) { $0 == .claudeCode ? "Claude" : $0.displayName }
       .font(.system(size: 11))
-      .accessibilityLabel("选择统计工具")
+      .accessibilityLabel(language.text(.accessibilitySelectTool))
 
       LazyVGrid(columns: columns, spacing: 10) {
-        MetricTile(title: "总计", value: snapshot.total.total, color: provider.tintColor)
-        MetricTile(title: "输入", value: snapshot.total.input, color: SpellbookDesign.metricBlue)
         MetricTile(
-          title: "输出",
+          title: language.text(.metricTotal), value: snapshot.total.total,
+          color: provider.tintColor)
+        MetricTile(
+          title: language.text(.metricInput), value: snapshot.total.input,
+          color: SpellbookDesign.metricBlue)
+        MetricTile(
+          title: language.text(.metricOutput),
           value: snapshot.total.output,
           color: SpellbookDesign.metricPurple
         )
         MetricTile(
-          title: "缓存",
+          title: language.text(.metricCache),
           value: snapshot.total.cacheRead + snapshot.total.cacheWrite,
           color: SpellbookDesign.success
         )
       }
 
-      Text("所有数值均继承全局时间范围。零值工具仍可选择。")
+      Text(language.text(.toolPeriodNote))
         .font(.caption)
         .foregroundStyle(.secondary)
 
@@ -168,16 +178,17 @@ private struct ToolTrendPanel: View {
   let analytics: UsageAnalytics
   let provider: AIProvider
   let period: UsagePeriod
+  @Environment(\.appLanguage) private var language
 
   var body: some View {
     let dailyUsage = analytics.dailyUsage(for: period, provider: provider)
 
     VStack(alignment: .leading, spacing: 10) {
       HStack {
-        Text("\(provider.displayName) · 按日趋势")
+        Text(language.text(.toolDailyTrendFormat, provider.displayName))
           .font(.system(size: 15, weight: .semibold))
         Spacer()
-        Text(period.displayName)
+        Text(period.displayName(language: language))
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -192,6 +203,7 @@ private struct ToolTrendPanel: View {
 
 private struct ModelRankingPanel: View {
   let analytics: UsageAnalytics
+  @Environment(\.appLanguage) private var language
 
   var body: some View {
     let rankings = analytics.modelRankings(for: .today)
@@ -199,20 +211,20 @@ private struct ModelRankingPanel: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
         VStack(alignment: .leading, spacing: 2) {
-          Text("今日模型排名")
+          Text(language.text(.rankingToday))
             .font(.headline)
-          Text("模型与推理档位分别统计 · 按 Token 排序")
+          Text(language.text(.rankingDescription))
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         Spacer()
-        Text("\(rankings.count) 个模型")
+        Text(language.text(.rankingModelCountFormat, rankings.count))
           .font(.caption.monospacedDigit())
           .foregroundStyle(.secondary)
       }
 
       if rankings.isEmpty {
-        Label("今天还没有模型调用", systemImage: "chart.bar.xaxis")
+        Label(language.text(.rankingEmpty), systemImage: "chart.bar.xaxis")
           .foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, minHeight: 80)
       } else {
@@ -233,16 +245,17 @@ struct PeriodTabs: View {
   static let options = UsagePeriod.allCases
 
   @Binding var selection: UsagePeriod
+  @Environment(\.appLanguage) private var language
 
   var body: some View {
     SpellbookSegmentedControl(
       options: Self.options,
       selection: $selection,
       horizontalPadding: 6
-    ) { $0.displayName }
+    ) { $0.displayName(language: language) }
     .font(.system(size: 12, weight: .medium))
     .frame(width: 360)
-    .accessibilityLabel("统计时间范围")
+    .accessibilityLabel(language.text(.accessibilityTimeRange))
   }
 }
 
@@ -250,6 +263,7 @@ private struct ProviderContributionRow: View {
   let provider: AIProvider
   let usage: TokenUsage
   let total: Int
+  @Environment(\.appLanguage) private var language
 
   private var share: Double {
     total == 0 ? 0 : Double(usage.total) / Double(total)
@@ -279,13 +293,19 @@ private struct ProviderContributionRow: View {
       }
       .frame(height: 7)
 
-      Text(usage.total.compactTokenCount)
+      Text(usage.total.compactTokenCount(language: language))
         .font(.caption.monospacedDigit())
         .foregroundStyle(.secondary)
         .frame(width: 78, alignment: .trailing)
     }
     .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(provider.displayName)，\(usage.total.formatted()) Token")
+    .accessibilityLabel(
+      language.text(
+        .accessibilityProviderTokensFormat,
+        provider.displayName,
+        usage.total.formatted(.number.locale(language.locale))
+      )
+    )
   }
 }
 
@@ -293,6 +313,7 @@ private struct MetricTile: View {
   let title: String
   let value: Int
   let color: Color
+  @Environment(\.appLanguage) private var language
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -300,7 +321,7 @@ private struct MetricTile: View {
         .font(.caption)
         .foregroundStyle(.secondary)
       Spacer(minLength: 12)
-      Text(value.compactTokenCount)
+      Text(value.compactTokenCount(language: language))
         .font(.system(size: 23, weight: .semibold))
         .tracking(-0.45)
         .monospacedDigit()
@@ -391,6 +412,7 @@ private struct DailyUsageHeatmap: View {
   let now: Date
   let calendar: Calendar
   let color: Color
+  @Environment(\.appLanguage) private var language
 
   private let cellSize: CGFloat = 9
   private let spacing: CGFloat = 2.5
@@ -426,8 +448,12 @@ private struct DailyUsageHeatmap: View {
 
   private var accessibilitySummary: String {
     data.map {
-      "\($0.day.formatted(.dateTime.month().day()))，\($0.usage.total.formatted()) Token"
-    }.joined(separator: "；")
+      language.text(
+        .heatmapTokensFormat,
+        $0.day.formatted(.dateTime.month().day().locale(language.locale)),
+        $0.usage.total.formatted(.number.locale(language.locale))
+      )
+    }.joined(separator: "; ")
   }
 
   var body: some View {
@@ -447,17 +473,21 @@ private struct DailyUsageHeatmap: View {
 
       ZStack(alignment: .leading) {
         ForEach(Array(monthMarkers.enumerated()), id: \.offset) { _, marker in
-          Text(marker.day.formatted(.dateTime.month(.abbreviated)))
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .offset(x: CGFloat(marker.column) * (cellSize + spacing))
+          Text(
+            marker.day.formatted(
+              .dateTime.month(.abbreviated).locale(language.locale)
+            )
+          )
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+          .offset(x: CGFloat(marker.column) * (cellSize + spacing))
         }
       }
       .frame(width: gridWidth, height: 14, alignment: .leading)
     }
     .frame(maxWidth: .infinity, alignment: .center)
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel("按日 Token 活跃度方阵")
+    .accessibilityLabel(language.text(.accessibilityDailyHeatmap))
     .accessibilityValue(accessibilitySummary)
   }
 
@@ -469,16 +499,25 @@ private struct DailyUsageHeatmap: View {
   }
 
   private func helpText(for cell: DailyUsageHeatmapCell) -> String {
-    let date = cell.day.formatted(.dateTime.year().month().day())
-    guard let tokens = cell.tokens else { return "\(date)，不在所选周期" }
-    if cell.isFuture { return "\(date)，尚未发生" }
-    return "\(date)，\(tokens.formatted()) Token"
+    let date = cell.day.formatted(
+      .dateTime.year().month().day().locale(language.locale)
+    )
+    guard let tokens = cell.tokens else {
+      return language.text(.heatmapOutsidePeriodFormat, date)
+    }
+    if cell.isFuture { return language.text(.heatmapFutureFormat, date) }
+    return language.text(
+      .heatmapTokensFormat,
+      date,
+      tokens.formatted(.number.locale(language.locale))
+    )
   }
 }
 
 private struct DailyUsageChart: View {
   let data: [DailyUsage]
   let color: Color
+  @Environment(\.appLanguage) private var language
 
   private var maximum: Int {
     max(1, data.map { $0.usage.total }.max() ?? 0)
@@ -490,16 +529,20 @@ private struct DailyUsageChart: View {
 
   private var accessibilitySummary: String {
     data.map {
-      "\($0.day.formatted(.dateTime.month().day()))，\($0.usage.total.formatted()) Token"
-    }.joined(separator: "；")
+      language.text(
+        .heatmapTokensFormat,
+        $0.day.formatted(.dateTime.month().day().locale(language.locale)),
+        $0.usage.total.formatted(.number.locale(language.locale))
+      )
+    }.joined(separator: "; ")
   }
 
   var body: some View {
     ZStack {
       Chart(data) { item in
         AreaMark(
-          x: .value("日期", item.day, unit: .day),
-          y: .value("Token", item.usage.total)
+          x: .value(language.text(.chartDate), item.day, unit: .day),
+          y: .value(language.text(.chartToken), item.usage.total)
         )
         .interpolationMethod(.monotone)
         .foregroundStyle(
@@ -511,8 +554,8 @@ private struct DailyUsageChart: View {
         )
 
         LineMark(
-          x: .value("日期", item.day, unit: .day),
-          y: .value("Token", item.usage.total)
+          x: .value(language.text(.chartDate), item.day, unit: .day),
+          y: .value(language.text(.chartToken), item.usage.total)
         )
         .interpolationMethod(.monotone)
         .foregroundStyle(color)
@@ -520,8 +563,8 @@ private struct DailyUsageChart: View {
 
         if item.id == data.last?.id {
           PointMark(
-            x: .value("日期", item.day, unit: .day),
-            y: .value("Token", item.usage.total)
+            x: .value(language.text(.chartDate), item.day, unit: .day),
+            y: .value(language.text(.chartToken), item.usage.total)
           )
           .foregroundStyle(SpellbookDesign.surface)
           .symbolSize(54)
@@ -535,7 +578,7 @@ private struct DailyUsageChart: View {
       .chartYScale(domain: 0...maximum)
       .chartXAxis {
         AxisMarks(values: .automatic(desiredCount: min(data.count, 7))) {
-          AxisValueLabel(format: .dateTime.month().day())
+          AxisValueLabel(format: .dateTime.month().day().locale(language.locale))
         }
       }
       .chartYAxis {
@@ -543,20 +586,20 @@ private struct DailyUsageChart: View {
           AxisGridLine().foregroundStyle(SpellbookDesign.line)
           AxisValueLabel {
             if let tokens = value.as(Int.self) {
-              Text(tokens.compactTokenCount)
+              Text(tokens.compactTokenCount(language: language))
             }
           }
         }
       }
 
       if total == 0 {
-        Text("暂无记录")
+        Text(language.text(.chartNoRecords))
           .font(.caption)
           .foregroundStyle(.tertiary)
       }
     }
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel("按日 Token 消耗图")
+    .accessibilityLabel(language.text(.accessibilityDailyTokenChart))
     .accessibilityValue(accessibilitySummary)
   }
 
@@ -565,6 +608,7 @@ private struct DailyUsageChart: View {
 private struct ModelRankingRow: View {
   let rank: Int
   let summary: ModelUsageSummary
+  @Environment(\.appLanguage) private var language
 
   private var source: String {
     [summary.model.tool?.displayName, summary.model.backend]
@@ -583,7 +627,7 @@ private struct ModelRankingRow: View {
       VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .firstTextBaseline) {
           VStack(alignment: .leading, spacing: 2) {
-            Text(summary.model.displayName)
+            Text(summary.model.localizedDisplayName(language: language))
               .font(.subheadline.weight(.semibold))
               .lineLimit(1)
             if !source.isEmpty {
@@ -594,23 +638,27 @@ private struct ModelRankingRow: View {
           }
           Spacer()
           VStack(alignment: .trailing, spacing: 2) {
-            Text(summary.usage.total.compactTokenCount)
+            Text(summary.usage.total.compactTokenCount(language: language))
               .font(.subheadline.weight(.semibold).monospacedDigit())
-            Text("\(summary.recordCount) 条用量记录")
+            Text(language.text(.rankingUsageRecordsFormat, summary.recordCount))
               .font(.caption2)
               .foregroundStyle(.secondary)
           }
         }
 
         HStack(spacing: 8) {
-          Text("缓存命中")
+          Text(language.text(.cacheHit))
             .font(.caption)
             .foregroundStyle(.secondary)
           ProgressView(value: summary.cacheHitRate)
             .tint(SpellbookDesign.success)
-          Text(summary.cacheHitRate.formatted(.percent.precision(.fractionLength(0))))
-            .font(.caption.monospacedDigit())
-            .frame(width: 38, alignment: .trailing)
+          Text(
+            summary.cacheHitRate.formatted(
+              .percent.precision(.fractionLength(0)).locale(language.locale)
+            )
+          )
+          .font(.caption.monospacedDigit())
+          .frame(width: 38, alignment: .trailing)
         }
       }
     }

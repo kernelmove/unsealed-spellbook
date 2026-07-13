@@ -18,10 +18,7 @@ final class UsageStore {
     self.collector = collector
   }
 
-  var menuBarTotal: String {
-    guard let total = snapshot?.total.total else { return "—" }
-    return total.formatted(.number.notation(.compactName))
-  }
+  var menuBarTokenTotal: Int? { snapshot?.total.total }
 
   func refresh() async {
     guard !isRefreshing else {

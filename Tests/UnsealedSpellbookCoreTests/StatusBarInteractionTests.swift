@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 import UnsealedSpellbookCore
+import UnsealedSpellbookLanguage
 
 @testable import UnsealedSpellbook
 
@@ -16,13 +17,16 @@ struct StatusBarInteractionTests {
   func prototypeLayout() {
     #expect(SpellbookDesign.windowSize == CGSize(width: 1040, height: 720))
     #expect(SpellbookDesign.sidebarWidth == 330)
-    #expect(DashboardPage.details.title == "概览")
+    #expect(DashboardPage.details.title(language: .simplifiedChinese) == "概览")
   }
 
   @Test("Overview exposes every time range as a tab")
   @MainActor
   func periodTabs() {
-    #expect(PeriodTabs.options.map(\.displayName) == ["今日", "本周", "近 7 天", "近 30 天", "本月"])
+    #expect(
+      PeriodTabs.options.map { $0.displayName(language: .simplifiedChinese) }
+        == ["今日", "本周", "近 7 天", "近 30 天", "本月"]
+    )
   }
 
   @Test("Daily heatmap anchors the selected range in a calendar grid")

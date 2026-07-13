@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import SwiftUI
+import UnsealedSpellbookLanguage
 
 @MainActor
 @Observable
@@ -11,6 +12,7 @@ final class DashboardNavigation {
 struct UsageMenuView: View {
   let store: UsageStore
   @Bindable var navigation: DashboardNavigation
+  @Environment(\.appLanguage) private var language
   @Environment(\.colorScheme) private var colorScheme
   @State private var preferredColorScheme: ColorScheme?
 
@@ -31,10 +33,10 @@ struct UsageMenuView: View {
       SpellbookSegmentedControl(
         options: DashboardPage.allCases,
         selection: $navigation.selectedPage
-      ) { $0.title }
+      ) { $0.title(language: language) }
       .font(.subheadline)
       .frame(width: 250)
-      .accessibilityLabel("页面")
+      .accessibilityLabel(language.text(.accessibilityPage))
 
       HStack(spacing: 0) {
         HStack(spacing: 8) {
@@ -60,8 +62,8 @@ struct UsageMenuView: View {
           }
           .disabled(store.isRefreshing)
           .frame(width: 30, height: 30)
-          .help("刷新本地用量")
-          .accessibilityLabel("刷新本地用量")
+          .help(language.text(.actionRefreshUsage))
+          .accessibilityLabel(language.text(.actionRefreshUsage))
 
           Button {
             preferredColorScheme = effectiveColorScheme == .dark ? .light : .dark
@@ -69,9 +71,9 @@ struct UsageMenuView: View {
             Image(systemName: effectiveColorScheme == .dark ? "sun.max" : "moon")
           }
           .frame(width: 30, height: 30)
-          .help(effectiveColorScheme == .dark ? "切换到浅色模式" : "切换到深色模式")
+          .help(themeActionTitle)
           .accessibilityLabel(
-            effectiveColorScheme == .dark ? "切换到浅色模式" : "切换到深色模式"
+            themeActionTitle
           )
 
           Button {
@@ -80,8 +82,8 @@ struct UsageMenuView: View {
             Image(systemName: "power")
           }
           .frame(width: 30, height: 30)
-          .help("退出 Unsealed Spellbook")
-          .accessibilityLabel("退出 Unsealed Spellbook")
+          .help(language.text(.actionQuit))
+          .accessibilityLabel(language.text(.actionQuit))
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
@@ -96,6 +98,12 @@ struct UsageMenuView: View {
 
   private var effectiveColorScheme: ColorScheme {
     preferredColorScheme ?? colorScheme
+  }
+
+  private var themeActionTitle: String {
+    language.text(
+      effectiveColorScheme == .dark ? .actionSwitchToLightMode : .actionSwitchToDarkMode
+    )
   }
 
   @ViewBuilder
@@ -120,9 +128,9 @@ struct UsageMenuView: View {
 
   private var loadingView: some View {
     ContentUnavailableView {
-      Label("正在读取本地日志", systemImage: "wand.and.stars")
+      Label(language.text(.loadingLocalLogs), systemImage: "wand.and.stars")
     } description: {
-      Text("首次扫描完成后会在内存中增量更新。")
+      Text(language.text(.loadingDescription))
     } actions: {
       ProgressView().controlSize(.small)
     }
@@ -137,11 +145,11 @@ enum DashboardPage: String, CaseIterable, Identifiable {
 
   var id: Self { self }
 
-  var title: String {
+  func title(language: AppLanguage) -> String {
     switch self {
-    case .details: "概览"
-    case .achievements: "徽章"
-    case .settings: "设置"
+    case .details: language.text(.navigationOverview)
+    case .achievements: language.text(.navigationAchievements)
+    case .settings: language.text(.navigationSettings)
     }
   }
 }

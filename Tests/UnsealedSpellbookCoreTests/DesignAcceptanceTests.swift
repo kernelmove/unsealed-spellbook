@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Testing
 import UnsealedSpellbookCore
+import UnsealedSpellbookLanguage
 
 @testable import UnsealedSpellbook
 
@@ -10,6 +11,19 @@ struct DesignAcceptanceTests {
   @Test("Overview, achievements, settings, and dark mode render at the prototype size")
   @MainActor
   func designScreens() async throws {
+    let previousLanguage = UserDefaults.standard.string(forKey: AppPreferences.languageKey)
+    UserDefaults.standard.set(
+      AppLanguage.english.rawValue,
+      forKey: AppPreferences.languageKey
+    )
+    defer {
+      if let previousLanguage {
+        UserDefaults.standard.set(previousLanguage, forKey: AppPreferences.languageKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: AppPreferences.languageKey)
+      }
+    }
+
     let fixtureRoot = FileManager.default.temporaryDirectory
       .appendingPathComponent(UUID().uuidString, isDirectory: true)
     defer { try? FileManager.default.removeItem(at: fixtureRoot) }
@@ -207,7 +221,13 @@ struct DesignAcceptanceTests {
     of content: Content,
     scheme: ColorScheme
   ) -> NSImage? {
-    let view = NSHostingView(rootView: content.preferredColorScheme(scheme))
+    let view = NSHostingView(
+      rootView:
+        content
+        .environment(\.appLanguage, AppLanguage.english)
+        .environment(\.locale, AppLanguage.english.locale)
+        .preferredColorScheme(scheme)
+    )
     view.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
     view.frame = NSRect(origin: .zero, size: SpellbookDesign.windowSize)
     view.layoutSubtreeIfNeeded()

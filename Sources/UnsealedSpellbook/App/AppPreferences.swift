@@ -1,9 +1,11 @@
 import Foundation
 import UnsealedSpellbookCore
+import UnsealedSpellbookLanguage
 
 enum AppPreferences {
   static let refreshIntervalKey = "refreshIntervalSeconds"
   static let showMenuBarTotalKey = "showMenuBarTotal"
+  static let languageKey = "appLanguage"
   static let acknowledgedAchievementsKey = "acknowledgedAchievementIDs"
   static let achievementUnlockRecordsKey = "achievementUnlockRecords"
 
@@ -27,5 +29,10 @@ enum AppPreferences {
 
   static func showMenuBarTotal(defaults: UserDefaults = .standard) -> Bool {
     defaults.object(forKey: showMenuBarTotalKey) as? Bool ?? true
+  }
+
+  static func language(defaults: UserDefaults = .standard) -> AppLanguage {
+    let code = defaults.string(forKey: languageKey)
+    return code.flatMap(AppLanguage.init(rawValue:)) ?? .simplifiedChinese
   }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UnsealedSpellbookCore
+import UnsealedSpellbookLanguage
 
 enum SpellbookDesign {
   static let windowSize = CGSize(width: 1040, height: 720)
@@ -93,25 +94,33 @@ extension AIProvider {
   }
 }
 
+extension ModelIdentity {
+  func localizedDisplayName(language: AppLanguage) -> String {
+    let localizedName = isKnown ? name : language.text(.unknownModel)
+    guard let variant else { return localizedName }
+    return "\(localizedName) · \(variant)"
+  }
+}
+
 extension UsagePeriod {
-  var displayName: String {
+  func displayName(language: AppLanguage) -> String {
     switch self {
-    case .today: "今日"
-    case .thisWeek: "本周"
-    case .last7Days: "近 7 天"
-    case .last30Days: "近 30 天"
-    case .thisMonth: "本月"
+    case .today: language.text(.periodToday)
+    case .thisWeek: language.text(.periodThisWeek)
+    case .last7Days: language.text(.periodLast7Days)
+    case .last30Days: language.text(.periodLast30Days)
+    case .thisMonth: language.text(.periodThisMonth)
     }
   }
 }
 
 extension BadgeTier {
-  var displayName: String {
+  func displayName(language: AppLanguage) -> String {
     switch self {
-    case .bronze: "铜"
-    case .silver: "银"
-    case .gold: "金"
-    case .diamond: "钻石"
+    case .bronze: language.text(.tierBronze)
+    case .silver: language.text(.tierSilver)
+    case .gold: language.text(.tierGold)
+    case .diamond: language.text(.tierDiamond)
     }
   }
 
@@ -126,8 +135,44 @@ extension BadgeTier {
 }
 
 extension Int {
-  var compactTokenCount: String {
-    formatted(.number.notation(.compactName).precision(.fractionLength(0...1)))
+  func compactTokenCount(language: AppLanguage) -> String {
+    formatted(
+      .number
+        .notation(.compactName)
+        .precision(.fractionLength(0...1))
+        .locale(language.locale)
+    )
+  }
+}
+
+extension Achievement {
+  func localizedTitle(language: AppLanguage) -> String {
+    language.translation(for: "achievement.\(id).title") ?? title
+  }
+
+  func localizedDetail(language: AppLanguage) -> String {
+    language.translation(for: "achievement.\(id).detail") ?? detail
+  }
+
+  func localizedProgress(language: AppLanguage) -> String {
+    switch progressMetric {
+    case .count(let current, let target):
+      return language.text(
+        .achievementCountProgressFormat,
+        current.compactTokenCount(language: language),
+        target.compactTokenCount(language: language)
+      )
+    case .cache(let hitRate, let sample):
+      return language.text(
+        .achievementCacheProgressFormat,
+        hitRate.formatted(
+          .percent.precision(.fractionLength(0)).locale(language.locale)
+        ),
+        sample.compactTokenCount(language: language)
+      )
+    case .unavailable:
+      return language.text(.achievementProgressUnavailable)
+    }
   }
 }
 

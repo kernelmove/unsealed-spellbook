@@ -69,6 +69,12 @@ public enum AchievementAvailability: String, Sendable {
   case hidden
 }
 
+public enum AchievementProgressMetric: Equatable, Sendable {
+  case count(current: Int, target: Int)
+  case cache(hitRate: Double, sample: Int)
+  case unavailable
+}
+
 public struct Achievement: Identifiable, Sendable {
   public let id: String
   public let title: String
@@ -77,6 +83,7 @@ public struct Achievement: Identifiable, Sendable {
   public let tier: BadgeTier
   public let progress: Double
   public let progressLabel: String
+  public let progressMetric: AchievementProgressMetric
   public let availability: AchievementAvailability
   public let criteriaVersion: Int
 
@@ -371,6 +378,7 @@ public struct UsageAnalytics: Sendable {
       tier: tier,
       progress: min(1, Double(value) / Double(target)),
       progressLabel: "\(compact(value)) / \(compact(target))",
+      progressMetric: .count(current: value, target: target),
       availability: .active,
       criteriaVersion: 1
     )
@@ -396,6 +404,10 @@ public struct UsageAnalytics: Sendable {
       progress: min(1, sampleProgress, rateProgress),
       progressLabel:
         "\(metrics.total.cacheHitRate.formatted(.percent.precision(.fractionLength(0)))) · 样本 \(compact(metrics.cacheSample))",
+      progressMetric: .cache(
+        hitRate: metrics.total.cacheHitRate,
+        sample: metrics.cacheSample
+      ),
       availability: .active,
       criteriaVersion: 1
     )
@@ -416,6 +428,7 @@ public struct UsageAnalytics: Sendable {
       tier: tier,
       progress: 0,
       progressLabel: "尚未开放",
+      progressMetric: .unavailable,
       availability: .comingSoon,
       criteriaVersion: 1
     )
@@ -430,6 +443,7 @@ public struct UsageAnalytics: Sendable {
       tier: .diamond,
       progress: 0,
       progressLabel: "",
+      progressMetric: .unavailable,
       availability: .hidden,
       criteriaVersion: 1
     )

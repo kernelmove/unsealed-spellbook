@@ -54,7 +54,9 @@ final class StatusBarController: NSObject {
     popover.animates = true
     popover.contentSize = SpellbookDesign.windowSize
     popover.contentViewController = NSHostingController(
-      rootView: UsageMenuView(store: store, navigation: navigation)
+      rootView: LanguageRoot {
+        UsageMenuView(store: store, navigation: navigation)
+      }
     )
   }
 
@@ -78,7 +80,7 @@ final class StatusBarController: NSObject {
 
   private func observeMenuBarTotal() {
     withObservationTracking {
-      _ = store.menuBarTotal
+      _ = store.menuBarTokenTotal
     } onChange: { [weak self] in
       Task { @MainActor in
         self?.updateStatusItem()
@@ -94,6 +96,14 @@ final class StatusBarController: NSObject {
   private func updateStatusItem() {
     let showTotal = AppPreferences.showMenuBarTotal()
     statusItem.length = showTotal ? NSStatusItem.variableLength : NSStatusItem.squareLength
-    statusItem.button?.title = showTotal ? store.menuBarTotal : ""
+    guard showTotal else {
+      statusItem.button?.title = ""
+      return
+    }
+
+    statusItem.button?.title =
+      store.menuBarTokenTotal?.compactTokenCount(
+        language: AppPreferences.language()
+      ) ?? "—"
   }
 }

@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 import UnsealedSpellbookCore
+import UnsealedSpellbookLanguage
 
 @testable import UnsealedSpellbook
 
@@ -96,10 +97,27 @@ struct AchievementPresentationTests {
     let active = achievements.first { $0.availability == .active }!
     let comingSoon = achievements.first { $0.availability == .comingSoon }!
 
-    #expect(AchievementPresentation.statusText(for: active, isUnlocked: false) == "未解锁")
-    #expect(AchievementPresentation.statusText(for: active, isUnlocked: true) == "已解锁")
     #expect(
-      AchievementPresentation.statusText(for: comingSoon, isUnlocked: false) == "未开放")
+      AchievementPresentation.statusText(
+        for: active,
+        isUnlocked: false,
+        language: .simplifiedChinese
+      ) == "未解锁"
+    )
+    #expect(
+      AchievementPresentation.statusText(
+        for: active,
+        isUnlocked: true,
+        language: .simplifiedChinese
+      ) == "已解锁"
+    )
+    #expect(
+      AchievementPresentation.statusText(
+        for: comingSoon,
+        isUnlocked: false,
+        language: .simplifiedChinese
+      ) == "未开放"
+    )
   }
 
   @Test("Locked badge artwork has a clearly subdued treatment")

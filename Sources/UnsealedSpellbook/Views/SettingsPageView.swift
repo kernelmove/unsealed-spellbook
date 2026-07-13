@@ -2,9 +2,11 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 import UnsealedSpellbookCore
+import UnsealedSpellbookLanguage
 
 struct SettingsPageView: View {
   let store: UsageStore
+  @Environment(\.appLanguage) private var language
 
   @AppStorage(AppPreferences.providerKey(.claudeCode)) private var claudeEnabled = true
   @AppStorage(AppPreferences.providerKey(.codex)) private var codexEnabled = true
@@ -12,6 +14,8 @@ struct SettingsPageView: View {
   @AppStorage(AppPreferences.providerKey(.openCode)) private var openCodeEnabled = true
   @AppStorage(AppPreferences.refreshIntervalKey) private var refreshInterval = 300.0
   @AppStorage(AppPreferences.showMenuBarTotalKey) private var showMenuBarTotal = true
+  @AppStorage(AppPreferences.languageKey) private var languageCode =
+    AppLanguage.simplifiedChinese.rawValue
   @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
   @State private var launchMessage: String?
 
@@ -45,9 +49,9 @@ struct SettingsPageView: View {
 
   private var pageHeader: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text("设置")
+      Text(language.text(.settingsTitle))
         .font(.title2.weight(.semibold))
-      Text("所有统计都在本机完成，不上传日志或 Token 数据。")
+      Text(language.text(.settingsPrivacyDescription))
         .foregroundStyle(.secondary)
     }
     .padding(20)
@@ -56,7 +60,7 @@ struct SettingsPageView: View {
   }
 
   private var sourceSettings: some View {
-    settingsCard("数据源", systemImage: "externaldrive") {
+    settingsCard(language.text(.settingsDataSources), systemImage: "externaldrive") {
       providerToggle(.claudeCode, isOn: $claudeEnabled)
       providerToggle(.codex, isOn: $codexEnabled)
       providerToggle(.ohMyPi, isOn: $ohMyPiEnabled)
@@ -65,10 +69,26 @@ struct SettingsPageView: View {
   }
 
   private var behaviorSettings: some View {
-    settingsCard("常驻行为", systemImage: "menubar.rectangle") {
-      Toggle("在菜单栏显示今日 Token", isOn: $showMenuBarTotal)
+    settingsCard(language.text(.settingsResidentBehavior), systemImage: "menubar.rectangle") {
+      HStack {
+        Text(language.text(.settingsLanguage))
+        Spacer()
+        Picker(language.text(.settingsLanguage), selection: $languageCode) {
+          ForEach(AppLanguage.allCases) { option in
+            Text(option.nativeName).tag(option.rawValue)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 140)
+      }
+
+      Text(language.text(.settingsLanguageDescription))
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      Toggle(language.text(.settingsShowMenuBarTotal), isOn: $showMenuBarTotal)
       Toggle(
-        "登录时启动",
+        language.text(.settingsLaunchAtLogin),
         isOn: Binding(
           get: { launchAtLogin },
           set: { enabled in updateLaunchAtLogin(enabled) }
@@ -76,12 +96,12 @@ struct SettingsPageView: View {
       )
 
       HStack {
-        Text("刷新间隔")
+        Text(language.text(.settingsRefreshInterval))
         Spacer()
-        Picker("刷新间隔", selection: $refreshInterval) {
-          Text("1 分钟").tag(60.0)
-          Text("5 分钟").tag(300.0)
-          Text("15 分钟").tag(900.0)
+        Picker(language.text(.settingsRefreshInterval), selection: $refreshInterval) {
+          Text(language.text(.settingsOneMinute)).tag(60.0)
+          Text(language.text(.settingsFiveMinutes)).tag(300.0)
+          Text(language.text(.settingsFifteenMinutes)).tag(900.0)
         }
         .labelsHidden()
         .frame(width: 120)
@@ -96,7 +116,7 @@ struct SettingsPageView: View {
   }
 
   private var privacySettings: some View {
-    settingsCard("本地数据", systemImage: "lock.shield") {
+    settingsCard(language.text(.settingsLocalData), systemImage: "lock.shield") {
       sourcePath("Claude Code", LocalUsageLocations.standard.claudeCodeDirectory)
       sourcePath("Codex", LocalUsageLocations.standard.codexDirectory)
       sourcePath("OpenCode", LocalUsageLocations.standard.openCodeDatabase)
@@ -107,21 +127,35 @@ struct SettingsPageView: View {
   }
 
   private var diagnostics: some View {
-    settingsCard("状态", systemImage: "waveform.path.ecg") {
+    settingsCard(language.text(.settingsStatus), systemImage: "waveform.path.ecg") {
       HStack {
         if let updated = store.lastUpdated {
-          Text("更新于 \(updated, format: .dateTime.hour().minute().second())")
+          Text(
+            language.text(
+              .settingsUpdatedAtFormat,
+              updated.formatted(
+                .dateTime.hour().minute().second().locale(language.locale)
+              )
+            )
+          )
         } else {
-          Text("尚未完成首次扫描")
+          Text(language.text(.settingsNotScanned))
         }
         Spacer()
-        Button("立即刷新") { Task { await store.refresh() } }
+        Button(language.text(.settingsRefreshNow)) { Task { await store.refresh() } }
           .disabled(store.isRefreshing)
       }
 
       if let diagnostics = store.diagnostics {
         Text(
-          "本轮读取 \(diagnostics.filesRead) 个文件 · \(diagnostics.bytesRead.formatted(.byteCount(style: .file))) · \(diagnostics.sourceErrors) 个来源错误"
+          language.text(
+            .settingsDiagnosticsFormat,
+            diagnostics.filesRead,
+            diagnostics.bytesRead.formatted(
+              .byteCount(style: .file).locale(language.locale)
+            ),
+            diagnostics.sourceErrors
+          )
         )
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -129,7 +163,7 @@ struct SettingsPageView: View {
 
       HStack {
         Spacer()
-        Button("退出 Unsealed Spellbook") {
+        Button(language.text(.settingsQuit)) {
           NSApplication.shared.terminate(nil)
         }
       }
@@ -185,11 +219,14 @@ struct SettingsPageView: View {
       launchAtLogin = SMAppService.mainApp.status == .enabled
       launchMessage =
         SMAppService.mainApp.status == .requiresApproval
-        ? "请在“系统设置 › 通用 › 登录项”中允许此应用。"
+        ? language.text(.settingsLaunchApprovalRequired)
         : nil
     } catch {
       launchAtLogin = SMAppService.mainApp.status == .enabled
-      launchMessage = error.localizedDescription
+      launchMessage = language.text(
+        .settingsLaunchUpdateFailedFormat,
+        error.localizedDescription
+      )
     }
   }
 

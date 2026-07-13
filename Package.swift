@@ -7,6 +7,7 @@ let package = Package(
   platforms: [.macOS(.v14)],
   products: [
     .library(name: "UnsealedSpellbookCore", targets: ["UnsealedSpellbookCore"]),
+    .library(name: "UnsealedSpellbookLanguage", targets: ["UnsealedSpellbookLanguage"]),
     .executable(name: "UnsealedSpellbook", targets: ["UnsealedSpellbook"]),
   ],
   targets: [
@@ -14,14 +15,15 @@ let package = Package(
       name: "UnsealedSpellbookCore",
       linkerSettings: [.linkedLibrary("sqlite3")]
     ),
+    .target(name: "UnsealedSpellbookLanguage"),
     .executableTarget(
       name: "UnsealedSpellbook",
-      dependencies: ["UnsealedSpellbookCore"],
+      dependencies: ["UnsealedSpellbookCore", "UnsealedSpellbookLanguage"],
       resources: [.copy("Resources/Badges")]
     ),
     .testTarget(
       name: "UnsealedSpellbookCoreTests",
-      dependencies: ["UnsealedSpellbookCore", "UnsealedSpellbook"]
+      dependencies: ["UnsealedSpellbookCore", "UnsealedSpellbookLanguage", "UnsealedSpellbook"]
     ),
   ]
 )
