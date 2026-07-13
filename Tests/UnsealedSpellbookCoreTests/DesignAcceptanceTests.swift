@@ -13,7 +13,7 @@ struct DesignAcceptanceTests {
   func designScreens() async throws {
     let previousLanguage = UserDefaults.standard.string(forKey: AppPreferences.languageKey)
     UserDefaults.standard.set(
-      AppLanguage.english.rawValue,
+      snapshotLanguage.rawValue,
       forKey: AppPreferences.languageKey
     )
     defer {
@@ -224,8 +224,8 @@ struct DesignAcceptanceTests {
     let view = NSHostingView(
       rootView:
         content
-        .environment(\.appLanguage, AppLanguage.english)
-        .environment(\.locale, AppLanguage.english.locale)
+        .environment(\.appLanguage, snapshotLanguage)
+        .environment(\.locale, snapshotLanguage.locale)
         .preferredColorScheme(scheme)
     )
     view.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
@@ -251,6 +251,11 @@ struct DesignAcceptanceTests {
       throw CocoaError(.fileWriteUnknown)
     }
     return png
+  }
+
+  private var snapshotLanguage: AppLanguage {
+    ProcessInfo.processInfo.environment["UNSEALED_SNAPSHOT_LANGUAGE"]
+      .flatMap(AppLanguage.init(rawValue:)) ?? .english
   }
 
   private var codexFixture: String {

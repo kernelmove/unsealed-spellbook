@@ -1,6 +1,8 @@
 # Unsealed Spellbook
 
-Unsealed Spellbook is a private, native macOS menu-bar dashboard for understanding how local AI coding tools use Tokens. It combines usage from Claude Code, Codex, Oh My Pi and OpenCode, then turns it into clear trends, model rankings and a 60-badge achievement system.
+**English** | [简体中文](README_zh.md)
+
+Unsealed Spellbook is a private, native macOS Token analytics tool for AI tools and models. Its menu-bar dashboard combines usage from Claude Code, Codex, Oh My Pi and OpenCode, then turns it into clear trends, model rankings and a 60-badge achievement system.
 
 Requires macOS 14 or later.
 
@@ -37,7 +39,7 @@ Left-click the menu-bar wand to open or close the dashboard. Right-click it to o
     </td>
     <td width="50%" valign="top">
       <img src="docs/screenshots/settings-en.png" alt="Settings screen in English">
-      <br><strong>Settings.</strong> Choose local sources, language, refresh cadence, login behavior and menu-bar display.
+      <br><strong>Settings.</strong> Choose local sources, language, refresh cadence, login behaviour and menu-bar display.
     </td>
   </tr>
 </table>
@@ -62,7 +64,7 @@ The Achievements page presents all-time Total Tokens, Active Days, Current Strea
 | Oh My Pi | `~/.omp/agent/sessions` | Recursive JSONL session logs |
 | OpenCode | `~/.local/share/opencode/opencode.db` | SQLite database |
 
-Assistant usage records are normalized into input, output, cache-read, cache-write, reasoning and total Token figures. Where available, the app also retains the tool, backend, exact model name and reasoning variant for aggregation.
+Assistant usage records are normalised into input, output, cache-read, cache-write, reasoning and total Token figures. Where available, the app also retains the tool, backend, exact model name and reasoning variant for aggregation.
 
 Each source can be enabled or disabled independently. Disabled sources are not scanned.
 
@@ -74,11 +76,11 @@ The interface can be changed in Settings between:
 - Traditional Chinese (`zh-Hant`); and
 - English (`en-US`).
 
-The English interface and this README use US English.
+The app's English interface uses US English; this README uses British English.
 
 ### Privacy and performance
 
-All collection and analysis take place on the Mac. The app does not upload logs, require account credentials or persist prompts, responses or raw conversations. Only normalized usage events are retained after parsing. Preferences, acknowledged badge identifiers and badge unlock records are stored locally in `UserDefaults`.
+All collection and analysis take place on the Mac. The app does not upload logs, require account credentials or persist prompts, responses or raw conversations. Only normalised usage events are retained after parsing. Preferences, acknowledged badge identifiers and badge unlock records are stored locally in `UserDefaults`.
 
 Collection is designed to remain lightweight:
 
@@ -117,9 +119,9 @@ Build, launch and verify that the process is running:
 
 ## Part II — The badge system
 
-The catalog contains **60 badges**: **57 are visible**, **50 have live criteria**, **7 are marked coming soon**, and **3 are hidden reserved Diamond slots**.
+The catalogue contains **60 badges**: **57 are visible**, **50 have live criteria**, **7 are marked coming soon**, and **3 are hidden reserved Diamond slots**.
 
-### Catalog
+### Catalogue
 
 | Tier | Total | Live criteria | Coming soon | Hidden | Visible |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -163,6 +165,6 @@ When the app first observes that a live criterion has been met, it stores the ba
 
 Once recorded, an unlock remains visible even if a source is later disabled or its local log is removed. Coming-soon and hidden badges cannot unlock.
 
-## Contributing and license
+## Contributing and licence
 
-See [AGENTS.md](AGENTS.md) for repository structure, development commands and contribution guidance. Unsealed Spellbook is available under the [MIT License](LICENSE).
+See [AGENTS.md](AGENTS.md) for repository structure, development commands and contribution guidance. Unsealed Spellbook is available under the [MIT Licence](LICENSE).
