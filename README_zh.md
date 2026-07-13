@@ -1,6 +1,16 @@
-# Unsealed Spellbook
+<h1 align="center">Unsealed Spellbook</h1>
 
-[English](README.md) | **简体中文**
+<h3 align="center">A macOS AI IDE &amp; Tokens statistics tool for multi LLM models</h3>
+
+<p align="center">
+  [<a href="README.md">English</a>] &nbsp;|&nbsp; [<strong>简体中文</strong>]
+</p>
+
+<p align="center">
+  <img src="docs/app-icon.png" alt="Unsealed Spellbook 应用图标" width="160">
+</p>
+
+---
 
 Unsealed Spellbook 是一款私密、原生的 macOS 菜单栏应用，用于统计和分析 AI 工具与模型的 Token 使用情况。它汇总 Claude Code、Codex、Oh My Pi 和 OpenCode 的本地用量，并将数据转化为清晰的趋势、模型排行和一套包含 60 枚徽章的成就系统。
 

@@ -1,6 +1,16 @@
-# Unsealed Spellbook
+<h1 align="center">Unsealed Spellbook</h1>
 
-**English** | [简体中文](README_zh.md)
+<h3 align="center">A macOS AI IDE &amp; Tokens statistics tool for multi LLM models</h3>
+
+<p align="center">
+  [<strong>English</strong>] &nbsp;|&nbsp; [<a href="README_zh.md">简体中文</a>]
+</p>
+
+<p align="center">
+  <img src="docs/app-icon.png" alt="Unsealed Spellbook app icon" width="160">
+</p>
+
+---
 
 Unsealed Spellbook is a private, native macOS Token analytics tool for AI tools and models. Its menu-bar dashboard combines usage from Claude Code, Codex, Oh My Pi and OpenCode, then turns it into clear trends, model rankings and a 60-badge achievement system.
 
