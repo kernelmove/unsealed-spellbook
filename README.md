@@ -12,7 +12,7 @@
 
 ---
 
-Unsealed Spellbook is a private, native macOS Token analytics tool for AI tools and models. Its menu-bar dashboard combines usage from Claude Code, Codex, Oh My Pi and OpenCode, then turns it into clear trends, model rankings and a 60-badge achievement system.
+Unsealed Spellbook is a private, native macOS Token analytics tool for AI tools and models. Its menu-bar dashboard combines usage from Claude Code, Codex, Gemini CLI, Oh My Pi and OpenCode, then turns it into clear trends, estimated costs, model rankings and a 60-badge achievement system.
 
 Requires macOS 14 or later.
 
@@ -20,12 +20,12 @@ Requires macOS 14 or later.
 
 ### At a glance
 
-- Compare total Token usage across five local-calendar periods: Today, This Week, Last 7 Days, Last 30 Days and This Month.
+- Compare Token usage or estimated USD cost across five local-calendar periods: Today, This Week, Last 7 Days, Last 30 Days and This Month.
 - Break usage down by tool, input, output and cache activity.
 - Explore a 52-week activity grid and a daily trend chart for each supported tool.
 - Rank today's models by exact model identity and reasoning variant, with record counts and cache hit rates.
 - Track all-time activity, streaks and badge progress without sending logs to a server.
-- Refresh manually or every 1, 5 or 15 minutes, launch at login, and switch between light and dark appearances.
+- Refresh manually or every 1, 5 or 15 minutes, launch at login, check GitHub for new releases, and switch between light and dark appearances.
 
 ### Screens and interaction
 
@@ -49,7 +49,7 @@ Left-click the menu-bar wand to open or close the dashboard. Right-click it to o
     </td>
     <td width="50%" valign="top">
       <img src="docs/screenshots/settings-en.png" alt="Settings screen in English">
-      <br><strong>Settings.</strong> Choose local sources, language, refresh cadence, login behaviour and menu-bar display.
+      <br><strong>Settings.</strong> Choose local sources, language, refresh cadence, release checks, login behaviour and menu-bar display.
     </td>
   </tr>
 </table>
@@ -58,7 +58,7 @@ Left-click the menu-bar wand to open or close the dashboard. Right-click it to o
 
 The Overview presents:
 
-- total usage and each tool's contribution;
+- total usage or estimated cost and each tool's contribution;
 - per-tool Total, Input, Output and Cache figures;
 - a daily activity heat map and selected-tool trend chart; and
 - today's model ranking, keeping model names and reasoning variants separate.
@@ -71,12 +71,15 @@ The Achievements page presents all-time Total Tokens, Active Days, Current Strea
 | --- | --- | --- |
 | Claude Code | `~/.claude/projects` | Recursive JSONL session logs |
 | Codex | `~/.codex/sessions` | Recursive JSONL session logs |
+| Gemini CLI | `~/.gemini/tmp`, `~/.gemini/gemini-cli/conversations` | JSONL journals and legacy JSON sessions |
 | Oh My Pi | `~/.omp/agent/sessions` | Recursive JSONL session logs |
 | OpenCode | `~/.local/share/opencode/opencode.db` | SQLite database |
 
 Assistant usage records are normalised into input, output, cache-read, cache-write, reasoning and total Token figures. Where available, the app also retains the tool, backend, exact model name and reasoning variant for aggregation.
 
 Each source can be enabled or disabled independently. Disabled sources are not scanned.
+
+Cost estimates use an exact model-name match against the bundled static catalogue. Unknown models remain visible but unpriced. See the [pricing rules and formula](docs/pricing.md); estimates do not replace provider invoices.
 
 ### Languages
 
@@ -96,9 +99,11 @@ Collection is designed to remain lightweight:
 
 - JSONL files are fingerprinted and read incrementally from their last known offsets; unchanged files are not read again.
 - Reads use 256 KiB chunks and a 512 KiB per-line ceiling. An oversized record is rejected without hiding valid records that follow it.
+- Legacy Gemini JSON sessions have an 8 MiB whole-file ceiling; unchanged and oversized files are not repeatedly read.
 - Replaced, truncated and deleted files are reconciled, and duplicate usage events are collapsed by tool and event identifier.
 - OpenCode is opened with SQLite read-only and query-only modes. Database and WAL fingerprints avoid unnecessary repeat queries.
 - A failing source does not prevent other sources from being collected; file, byte and source-error diagnostics remain visible in Settings.
+- Release checks make one lightweight GitHub API request at most once per day when enabled. Updates are downloaded and installed manually from the project's fixed Releases page.
 
 ### Build and run
 

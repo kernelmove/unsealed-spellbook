@@ -16,7 +16,10 @@ final class StatusBarController: NSObject {
   private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
   private let popover = NSPopover()
   private let store = UsageStore()
+  private let updateStore = GitHubReleaseStore()
   private let navigation = DashboardNavigation()
+  private var updateCheckTask: Task<Void, Never>?
+  private var automaticUpdateChecksEnabled = AppPreferences.automaticallyCheckForUpdates()
 
   override init() {
     super.init()
@@ -32,6 +35,7 @@ final class StatusBarController: NSObject {
     )
 
     Task { [store] in await store.runRefreshLoop() }
+    scheduleAutomaticUpdateChecks()
   }
 
   private func configureStatusItem() {
@@ -55,7 +59,7 @@ final class StatusBarController: NSObject {
     popover.contentSize = SpellbookDesign.windowSize
     popover.contentViewController = NSHostingController(
       rootView: LanguageRoot {
-        UsageMenuView(store: store, navigation: navigation)
+        UsageMenuView(store: store, updateStore: updateStore, navigation: navigation)
       }
     )
   }
@@ -91,6 +95,10 @@ final class StatusBarController: NSObject {
 
   @objc private func defaultsChanged() {
     updateStatusItem()
+    let isEnabled = AppPreferences.automaticallyCheckForUpdates()
+    guard isEnabled != automaticUpdateChecksEnabled else { return }
+    automaticUpdateChecksEnabled = isEnabled
+    scheduleAutomaticUpdateChecks()
   }
 
   private func updateStatusItem() {
@@ -105,5 +113,28 @@ final class StatusBarController: NSObject {
       store.menuBarTokenTotal?.compactTokenCount(
         language: AppPreferences.language()
       ) ?? "—"
+  }
+
+  private func scheduleAutomaticUpdateChecks() {
+    updateCheckTask?.cancel()
+    guard automaticUpdateChecksEnabled else { return }
+
+    updateCheckTask = Task { [weak self] in
+      while !Task.isCancelled {
+        guard let delay = AppPreferences.automaticUpdateCheckDelay() else { return }
+        if delay > 0 {
+          do {
+            try await Task.sleep(for: .seconds(delay))
+          } catch {
+            return
+          }
+          continue
+        }
+
+        AppPreferences.recordUpdateCheck()
+        guard let self else { return }
+        await updateStore.check()
+      }
+    }
   }
 }

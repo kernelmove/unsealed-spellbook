@@ -3,12 +3,28 @@ import Foundation
 public struct ParseResult: Sendable {
   public let events: [UsageEvent]
   public let rejectedRecords: Int
+  public let removedEventIDs: Set<String>
+
+  public init(
+    events: [UsageEvent],
+    rejectedRecords: Int,
+    removedEventIDs: Set<String> = []
+  ) {
+    self.events = events
+    self.rejectedRecords = rejectedRecords
+    self.removedEventIDs = removedEventIDs
+  }
 }
 
 public struct UsageParserState: Sendable {
   var currentModel: ModelIdentity?
   var reasoningVariant: String?
   var seenEventIDs: Set<String> = []
+  var geminiSessionID: String?
+  var geminiLastUpdated: Date?
+  var geminiMessageIDs: [String] = []
+  var geminiMessageIDSet: Set<String> = []
+  var geminiEventIDs: [String: String] = [:]
 
   public init() {}
 }
@@ -21,6 +37,292 @@ extension UsageLogParser {
   public func parse(_ data: Data, sourceID: String) -> ParseResult {
     var state = UsageParserState()
     return parse(data, sourceID: sourceID, state: &state)
+  }
+}
+
+public struct GeminiCLIParser: UsageLogParser {
+  public init() {}
+
+  public func parse(
+    _ data: Data,
+    sourceID: String,
+    state: inout UsageParserState
+  ) -> ParseResult {
+    let records =
+      JSONLog.object(from: data).map { ([$0], 0) }
+      ?? JSONLog.records(in: data)
+    var rejected = records.1
+    var updated: [String: UsageEvent] = [:]
+    var removed: Set<String> = []
+
+    for record in records.0 {
+      if let rewindID = record["$rewindTo"] as? String {
+        rewind(
+          to: rewindID,
+          state: &state,
+          updated: &updated,
+          removed: &removed
+        )
+        continue
+      }
+      if record["id"] is String {
+        apply(
+          record,
+          sourceID: sourceID,
+          state: &state,
+          updated: &updated,
+          removed: &removed,
+          rejected: &rejected
+        )
+        continue
+      }
+      if let values = record["$set"] as? [String: Any] {
+        updateGeminiMetadata(from: values, state: &state)
+        if values.keys.contains("messages") {
+          apply(
+            values["messages"],
+            replacing: true,
+            sourceID: sourceID,
+            state: &state,
+            updated: &updated,
+            removed: &removed,
+            rejected: &rejected
+          )
+        }
+        continue
+      }
+      if let values = record["$push"] as? [String: Any] {
+        apply(
+          values["messages"],
+          replacing: false,
+          sourceID: sourceID,
+          state: &state,
+          updated: &updated,
+          removed: &removed,
+          rejected: &rejected
+        )
+        continue
+      }
+      if record["sessionId"] is String {
+        updateGeminiMetadata(from: record, state: &state)
+        if record.keys.contains("messages") {
+          apply(
+            record["messages"],
+            replacing: false,
+            sourceID: sourceID,
+            state: &state,
+            updated: &updated,
+            removed: &removed,
+            rejected: &rejected
+          )
+        }
+      }
+    }
+
+    return ParseResult(
+      events: state.geminiMessageIDs.compactMap {
+        state.geminiEventIDs[$0].flatMap { updated[$0] }
+      },
+      rejectedRecords: rejected,
+      removedEventIDs: removed
+    )
+  }
+
+  private func updateGeminiMetadata(
+    from record: [String: Any],
+    state: inout UsageParserState
+  ) {
+    if let sessionID = record["sessionId"] as? String, !sessionID.isEmpty {
+      state.geminiSessionID = sessionID
+    }
+    if let lastUpdated = JSONLog.date(record["lastUpdated"]) {
+      state.geminiLastUpdated = lastUpdated
+    }
+  }
+
+  private func apply(
+    _ value: Any?,
+    replacing: Bool,
+    sourceID: String,
+    state: inout UsageParserState,
+    updated: inout [String: UsageEvent],
+    removed: inout Set<String>,
+    rejected: inout Int
+  ) {
+    if replacing {
+      for eventID in state.geminiEventIDs.values {
+        removed.insert(eventID)
+        updated.removeValue(forKey: eventID)
+      }
+      state.geminiMessageIDs.removeAll()
+      state.geminiMessageIDSet.removeAll()
+      state.geminiEventIDs.removeAll()
+    }
+
+    let messages: [[String: Any]]
+    if let message = value as? [String: Any] {
+      messages = [message]
+    } else if let values = value as? [Any] {
+      messages = values.compactMap { $0 as? [String: Any] }
+    } else {
+      return
+    }
+    for message in messages {
+      apply(
+        message,
+        sourceID: sourceID,
+        state: &state,
+        updated: &updated,
+        removed: &removed,
+        rejected: &rejected
+      )
+    }
+  }
+
+  private func apply(
+    _ message: [String: Any],
+    sourceID: String,
+    state: inout UsageParserState,
+    updated: inout [String: UsageEvent],
+    removed: inout Set<String>,
+    rejected: inout Int
+  ) {
+    guard let messageID = message["id"] as? String, !messageID.isEmpty else { return }
+    if state.geminiMessageIDSet.insert(messageID).inserted {
+      state.geminiMessageIDs.append(messageID)
+    }
+
+    guard message["type"] as? String == "gemini" else {
+      removeUsage(
+        for: messageID,
+        state: &state,
+        updated: &updated,
+        removed: &removed
+      )
+      return
+    }
+    guard
+      let timestamp = JSONLog.date(message["timestamp"]),
+      let tokens = message["tokens"] as? [String: Any],
+      let rawInput = JSONLog.token(tokens["input"]),
+      let output = JSONLog.token(tokens["output"]),
+      let cached = JSONLog.token(tokens["cached"], default: 0),
+      let thoughts = JSONLog.token(tokens["thoughts"], default: 0),
+      let tool = JSONLog.token(tokens["tool"], default: 0),
+      cached <= rawInput,
+      !tokens.keys.contains("total") || JSONLog.token(tokens["total"]) != nil,
+      let usage = geminiUsage(
+        rawInput: rawInput,
+        output: output,
+        cached: cached,
+        thoughts: thoughts,
+        tool: tool,
+        reportedTotal: JSONLog.token(tokens["total"])
+      )
+    else {
+      removeUsage(
+        for: messageID,
+        state: &state,
+        updated: &updated,
+        removed: &removed
+      )
+      rejected += 1
+      return
+    }
+
+    let sessionID = state.geminiSessionID ?? sourceID
+    let eventID = "\(sessionID):\(messageID)"
+    if let previousID = state.geminiEventIDs[messageID], previousID != eventID {
+      removed.insert(previousID)
+      updated.removeValue(forKey: previousID)
+    }
+    state.geminiEventIDs[messageID] = eventID
+    removed.remove(eventID)
+    updated[eventID] = UsageEvent(
+      id: eventID,
+      provider: .geminiCLI,
+      timestamp: timestamp,
+      usage: usage,
+      model: (message["model"] as? String).map {
+        ModelIdentity(tool: .geminiCLI, name: $0)
+      } ?? .unknown(tool: .geminiCLI)
+    )
+  }
+
+  private func rewind(
+    to messageID: String,
+    state: inout UsageParserState,
+    updated: inout [String: UsageEvent],
+    removed: inout Set<String>
+  ) {
+    let start =
+      state.geminiMessageIDs.firstIndex(of: messageID) ?? state.geminiMessageIDs.startIndex
+    let discarded = state.geminiMessageIDs[start...]
+    for discardedID in discarded {
+      state.geminiMessageIDSet.remove(discardedID)
+      if let eventID = state.geminiEventIDs.removeValue(forKey: discardedID) {
+        removed.insert(eventID)
+        updated.removeValue(forKey: eventID)
+      }
+    }
+    state.geminiMessageIDs.removeSubrange(start...)
+  }
+
+  private func removeUsage(
+    for messageID: String,
+    state: inout UsageParserState,
+    updated: inout [String: UsageEvent],
+    removed: inout Set<String>
+  ) {
+    guard let eventID = state.geminiEventIDs.removeValue(forKey: messageID) else { return }
+    removed.insert(eventID)
+    updated.removeValue(forKey: eventID)
+  }
+
+  private func sum(_ lhs: Int, _ rhs: Int) -> Int? {
+    let (value, overflow) = lhs.addingReportingOverflow(rhs)
+    return overflow ? nil : value
+  }
+
+  private func geminiUsage(
+    rawInput: Int,
+    output: Int,
+    cached: Int,
+    thoughts: Int,
+    tool: Int,
+    reportedTotal: Int?
+  ) -> TokenUsage? {
+    guard
+      let promptAndOutput = sum(rawInput, output),
+      let baseTotal = sum(promptAndOutput, thoughts)
+    else { return nil }
+
+    let separateToolTokens: Int
+    let total: Int
+    if let reportedTotal {
+      if reportedTotal == baseTotal {
+        separateToolTokens = 0
+        total = reportedTotal
+      } else if let totalWithTool = sum(baseTotal, tool), reportedTotal == totalWithTool {
+        separateToolTokens = tool
+        total = reportedTotal
+      } else {
+        return nil
+      }
+    } else {
+      guard tool == 0 else { return nil }
+      separateToolTokens = 0
+      total = baseTotal
+    }
+
+    guard let input = sum(rawInput - cached, separateToolTokens) else { return nil }
+    return TokenUsage(
+      input: input,
+      output: output,
+      cacheRead: cached,
+      reasoning: thoughts,
+      total: total
+    )
   }
 }
 
@@ -168,7 +470,7 @@ public struct CodexParser: UsageLogParser {
 
     return TokenUsage(
       input: rawInput - cached,
-      output: output,
+      output: output - reasoning,
       cacheRead: cached,
       reasoning: reasoning,
       total: total
@@ -295,7 +597,7 @@ public struct OhMyPiParser: UsageLogParser {
         timestamp: timestamp,
         usage: TokenUsage(
           input: input,
-          output: output,
+          output: output - reasoning,
           cacheRead: cacheRead,
           cacheWrite: cacheWrite,
           reasoning: reasoning,

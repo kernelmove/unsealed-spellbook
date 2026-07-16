@@ -206,3 +206,109 @@ struct CollectorAcceptanceTests {
     case sqlite
   }
 }
+
+@Suite("Gemini CLI collection")
+struct GeminiCollectorAcceptanceTests {
+  @Test("Gemini sessions are cached, deduplicated across migration, and rewound incrementally")
+  func incrementalCollection() async throws {
+    let fixture = try FixtureDirectory()
+    defer { fixture.remove() }
+    let jsonl = fixture.chats.appendingPathComponent("session-current.jsonl")
+    let firstMessage =
+      #"{"id":"one","timestamp":"2026-07-12T01:02:01Z","type":"gemini","model":"gemini-test","tokens":{"input":20,"output":7,"cached":5,"thoughts":3,"total":30}}"#
+    let secondMessage =
+      #"{"id":"two","timestamp":"2026-07-12T01:02:02Z","type":"gemini","model":"gemini-test","tokens":{"input":40,"output":8,"cached":10,"thoughts":2,"total":50}}"#
+    let journal =
+      #"{"sessionId":"session_1","projectHash":"project"}"# + "\n"
+      + firstMessage + "\n" + secondMessage + "\n"
+    try Data(journal.utf8).write(to: jsonl)
+
+    let legacy = fixture.chats.appendingPathComponent("session-legacy.json")
+    let legacyRecord =
+      #"{"sessionId":"session_1","projectHash":"project","messages":["#
+      + firstMessage + "," + secondMessage + "]}"
+    try Data(legacyRecord.utf8).write(to: legacy)
+
+    let collector = LocalUsageCollector(locations: fixture.locations)
+    let interval = DateInterval(start: .distantPast, end: .distantFuture)
+    let first = await collector.collect(interval: interval, enabledProviders: [.geminiCLI])
+    let unchanged = await collector.collect(interval: interval, enabledProviders: [.geminiCLI])
+
+    #expect(first.snapshot.providers[.geminiCLI]?.total == 80)
+    #expect(first.snapshot.eventCount == 2)
+    #expect(first.diagnostics.filesRead == 2)
+    #expect(unchanged.snapshot.total.total == 80)
+    #expect(unchanged.diagnostics.filesRead == 0)
+    #expect(unchanged.diagnostics.bytesRead == 0)
+
+    let rewind = #"{"$rewindTo":"two"}"# + "\n"
+    let handle = try FileHandle(forWritingTo: jsonl)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data(rewind.utf8))
+    try handle.close()
+
+    let rewound = await collector.collect(interval: interval, enabledProviders: [.geminiCLI])
+
+    #expect(rewound.snapshot.providers[.geminiCLI]?.total == 30)
+    #expect(rewound.events.map(\.id) == ["session_1:one"])
+    #expect(rewound.diagnostics.filesRead == 1)
+    #expect(rewound.diagnostics.bytesRead == rewind.utf8.count)
+  }
+
+  @Test("Oversized legacy Gemini sessions are rejected without being read repeatedly")
+  func boundedLegacyFile() async throws {
+    let fixture = try FixtureDirectory()
+    defer { fixture.remove() }
+    let oversized = fixture.chats.appendingPathComponent("session-oversized.json")
+    _ = FileManager.default.createFile(atPath: oversized.path, contents: nil)
+    let handle = try FileHandle(forWritingTo: oversized)
+    try handle.truncate(atOffset: 9 * 1_024 * 1_024)
+    try handle.close()
+    let collector = LocalUsageCollector(locations: fixture.locations)
+    let interval = DateInterval(start: .distantPast, end: .distantFuture)
+
+    let first = await collector.collect(interval: interval, enabledProviders: [.geminiCLI])
+    let unchanged = await collector.collect(interval: interval, enabledProviders: [.geminiCLI])
+
+    #expect(first.diagnostics.filesDiscovered == 1)
+    #expect(first.diagnostics.filesRead == 0)
+    #expect(first.diagnostics.bytesRead == 0)
+    #expect(first.diagnostics.oversizedRecords == 1)
+    #expect(unchanged.diagnostics.filesRead == 0)
+    #expect(unchanged.diagnostics.oversizedRecords == 0)
+  }
+
+  private struct FixtureDirectory {
+    let root: URL
+    let claude: URL
+    let codex: URL
+    let gemini: URL
+    let chats: URL
+    let openCodeDatabase: URL
+
+    init() throws {
+      root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+      claude = root.appendingPathComponent("claude")
+      codex = root.appendingPathComponent("codex")
+      gemini = root.appendingPathComponent("gemini")
+      chats = gemini.appendingPathComponent("project/chats")
+      openCodeDatabase = root.appendingPathComponent("opencode.db")
+      try FileManager.default.createDirectory(at: claude, withIntermediateDirectories: true)
+      try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+      try FileManager.default.createDirectory(at: chats, withIntermediateDirectories: true)
+    }
+
+    var locations: LocalUsageLocations {
+      LocalUsageLocations(
+        claudeCodeDirectory: claude,
+        codexDirectory: codex,
+        geminiCLIDirectories: [gemini],
+        openCodeDatabase: openCodeDatabase
+      )
+    }
+
+    func remove() {
+      try? FileManager.default.removeItem(at: root)
+    }
+  }
+}

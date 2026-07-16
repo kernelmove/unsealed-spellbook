@@ -3,17 +3,20 @@ import Foundation
 public struct LocalUsageLocations: Sendable {
   public let claudeCodeDirectory: URL
   public let codexDirectory: URL
+  public let geminiCLIDirectories: [URL]
   public let ohMyPiDirectory: URL?
   public let openCodeDatabase: URL
 
   public init(
     claudeCodeDirectory: URL,
     codexDirectory: URL,
+    geminiCLIDirectories: [URL] = [],
     ohMyPiDirectory: URL? = nil,
     openCodeDatabase: URL
   ) {
     self.claudeCodeDirectory = claudeCodeDirectory
     self.codexDirectory = codexDirectory
+    self.geminiCLIDirectories = geminiCLIDirectories
     self.ohMyPiDirectory = ohMyPiDirectory
     self.openCodeDatabase = openCodeDatabase
   }
@@ -23,6 +26,10 @@ public struct LocalUsageLocations: Sendable {
     return LocalUsageLocations(
       claudeCodeDirectory: home.appendingPathComponent(".claude/projects"),
       codexDirectory: home.appendingPathComponent(".codex/sessions"),
+      geminiCLIDirectories: [
+        home.appendingPathComponent(".gemini/tmp"),
+        home.appendingPathComponent(".gemini/gemini-cli/conversations"),
+      ],
       ohMyPiDirectory: home.appendingPathComponent(".omp/agent/sessions"),
       openCodeDatabase: home.appendingPathComponent(".local/share/opencode/opencode.db")
     )
@@ -49,6 +56,7 @@ public struct CollectionResult: Sendable {
 public actor LocalUsageCollector {
   private static let chunkBytes = 256 * 1_024
   private static let maxLineBytes = 512 * 1_024
+  private static let maxWholeFileBytes = 8 * 1_024 * 1_024
 
   private let locations: LocalUsageLocations
   private let sources: [JSONLSource]
@@ -77,6 +85,16 @@ public actor LocalUsageCollector {
           parser: OhMyPiParser()
         ))
     }
+    for directory in locations.geminiCLIDirectories {
+      sources.append(
+        JSONLSource(
+          provider: .geminiCLI,
+          directory: directory,
+          parser: GeminiCLIParser(),
+          fileExtensions: ["json", "jsonl"],
+          isGeminiSession: true
+        ))
+    }
     self.sources = sources
   }
 
@@ -90,12 +108,16 @@ public actor LocalUsageCollector {
     var activeFiles = Set<URL>()
 
     for source in sources where enabledProviders.contains(source.provider) {
-      let files = discoverJSONL(in: source.directory, modifiedSince: interval.start)
+      let files = discoverFiles(for: source, modifiedSince: interval.start)
       metrics.filesDiscovered += files.count
       for file in files {
         activeFiles.insert(file)
         do {
-          try update(file: file, parser: source.parser, metrics: &metrics)
+          if file.pathExtension.lowercased() == "json" {
+            try updateWholeFile(file: file, parser: source.parser, metrics: &metrics)
+          } else {
+            try update(file: file, parser: source.parser, metrics: &metrics)
+          }
         } catch {
           metrics.sourceErrors += 1
         }
@@ -103,7 +125,7 @@ public actor LocalUsageCollector {
     }
     fileCache = fileCache.filter { activeFiles.contains($0.key) }
 
-    var events = fileCache.values.flatMap(\.events.values)
+    var events = collectedFileEvents()
     if enabledProviders.contains(.openCode) {
       events.append(contentsOf: collectOpenCode(interval: interval, metrics: &metrics))
     } else {
@@ -118,18 +140,25 @@ public actor LocalUsageCollector {
     )
   }
 
-  private func discoverJSONL(in directory: URL, modifiedSince start: Date) -> [URL] {
+  private func discoverFiles(for source: JSONLSource, modifiedSince start: Date) -> [URL] {
     let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]
     guard
       let enumerator = FileManager.default.enumerator(
-        at: directory,
+        at: source.directory,
         includingPropertiesForKeys: keys,
         options: [.skipsHiddenFiles, .skipsPackageDescendants]
       )
     else { return [] }
 
     var files: [URL] = []
-    for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+    for case let url as URL in enumerator
+    where source.fileExtensions.contains(url.pathExtension.lowercased()) {
+      if source.isGeminiSession,
+        !url.lastPathComponent.hasPrefix("session-"),
+        !(url.pathExtension == "jsonl" && url.pathComponents.contains("chats"))
+      {
+        continue
+      }
       guard
         let values = try? url.resourceValues(forKeys: Set(keys)),
         values.isRegularFile == true,
@@ -138,6 +167,89 @@ public actor LocalUsageCollector {
       files.append(url)
     }
     return files
+  }
+
+  private func collectedFileEvents() -> [UsageEvent] {
+    var events: [UsageEvent] = []
+    var geminiSessions: [String: (url: URL, cache: LogCache)] = [:]
+
+    for (url, cache) in fileCache {
+      guard let sessionID = cache.parserState.geminiSessionID else {
+        events.append(contentsOf: cache.events.values)
+        continue
+      }
+      if let current = geminiSessions[sessionID],
+        !isPreferredGeminiSource(url: url, cache: cache, over: current)
+      {
+        continue
+      }
+      geminiSessions[sessionID] = (url, cache)
+    }
+
+    for candidate in geminiSessions.values {
+      events.append(contentsOf: candidate.cache.events.values)
+    }
+    return events
+  }
+
+  private func isPreferredGeminiSource(
+    url: URL,
+    cache: LogCache,
+    over current: (url: URL, cache: LogCache)
+  ) -> Bool {
+    let rank = url.pathExtension.lowercased() == "jsonl" ? 2 : 1
+    let currentRank = current.url.pathExtension.lowercased() == "jsonl" ? 2 : 1
+    if rank != currentRank { return rank > currentRank }
+
+    let updated = cache.parserState.geminiLastUpdated ?? .distantPast
+    let currentUpdated = current.cache.parserState.geminiLastUpdated ?? .distantPast
+    if updated != currentUpdated { return updated > currentUpdated }
+
+    let modified = cache.fingerprint?.modified ?? .distantPast
+    let currentModified = current.cache.fingerprint?.modified ?? .distantPast
+    if modified != currentModified { return modified > currentModified }
+    return url.path > current.url.path
+  }
+
+  private func updateWholeFile(
+    file: URL,
+    parser: any UsageLogParser,
+    metrics: inout MutableDiagnostics
+  ) throws {
+    let fingerprint = try fingerprint(file)
+    if fileCache[file]?.fingerprint == fingerprint { return }
+
+    guard fingerprint.size <= Self.maxWholeFileBytes else {
+      metrics.oversizedRecords += 1
+      var cache = LogCache()
+      cache.fingerprint = fingerprint
+      cache.offset = UInt64(fingerprint.size)
+      fileCache[file] = cache
+      return
+    }
+
+    let handle = try FileHandle(forReadingFrom: file)
+    defer { try? handle.close() }
+    let data = try handle.read(upToCount: Self.maxWholeFileBytes + 1) ?? Data()
+    guard data.count <= Self.maxWholeFileBytes else {
+      metrics.oversizedRecords += 1
+      var cache = LogCache()
+      cache.fingerprint = fingerprint
+      cache.offset = UInt64(fingerprint.size)
+      fileCache[file] = cache
+      return
+    }
+
+    metrics.filesRead += 1
+    metrics.bytesRead += data.count
+    var state = UsageParserState()
+    let result = parser.parse(data, sourceID: file.path, state: &state)
+    var cache = LogCache()
+    cache.parserState = state
+    merge(result, into: &cache, metrics: &metrics)
+    cache.offset = UInt64(fingerprint.size)
+    cache.fingerprint = fingerprint
+    fileCache[file] = cache
   }
 
   private func update(
@@ -245,6 +357,9 @@ public actor LocalUsageCollector {
     metrics: inout MutableDiagnostics,
     countRejected: Bool = true
   ) {
+    for eventID in result.removedEventIDs {
+      cache.events.removeValue(forKey: eventID)
+    }
     for event in result.events {
       cache.events[event.id] = event
     }
@@ -309,6 +424,22 @@ private struct JSONLSource: Sendable {
   let provider: AIProvider
   let directory: URL
   let parser: any UsageLogParser
+  let fileExtensions: Set<String>
+  let isGeminiSession: Bool
+
+  init(
+    provider: AIProvider,
+    directory: URL,
+    parser: any UsageLogParser,
+    fileExtensions: Set<String> = ["jsonl"],
+    isGeminiSession: Bool = false
+  ) {
+    self.provider = provider
+    self.directory = directory
+    self.parser = parser
+    self.fileExtensions = fileExtensions
+    self.isGeminiSession = isGeminiSession
+  }
 }
 
 private struct FileFingerprint: Equatable, Sendable {

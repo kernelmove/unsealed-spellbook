@@ -3,8 +3,12 @@ import UnsealedSpellbookCore
 import UnsealedSpellbookLanguage
 
 enum AppPreferences {
+  private static let updateCheckInterval: TimeInterval = 24 * 60 * 60
+
   static let refreshIntervalKey = "refreshIntervalSeconds"
   static let showMenuBarTotalKey = "showMenuBarTotal"
+  static let automaticallyCheckForUpdatesKey = "automaticallyCheckForUpdates"
+  static let lastUpdateCheckKey = "lastUpdateCheck"
   static let languageKey = "appLanguage"
   static let acknowledgedAchievementsKey = "acknowledgedAchievementIDs"
   static let achievementUnlockRecordsKey = "achievementUnlockRecords"
@@ -29,6 +33,34 @@ enum AppPreferences {
 
   static func showMenuBarTotal(defaults: UserDefaults = .standard) -> Bool {
     defaults.object(forKey: showMenuBarTotalKey) as? Bool ?? true
+  }
+
+  static func shouldAutomaticallyCheckForUpdates(
+    now: Date = Date(),
+    defaults: UserDefaults = .standard
+  ) -> Bool {
+    automaticUpdateCheckDelay(now: now, defaults: defaults) == 0
+  }
+
+  static func automaticallyCheckForUpdates(defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey: automaticallyCheckForUpdatesKey) as? Bool ?? true
+  }
+
+  static func automaticUpdateCheckDelay(
+    now: Date = Date(),
+    defaults: UserDefaults = .standard
+  ) -> TimeInterval? {
+    guard automaticallyCheckForUpdates(defaults: defaults) else { return nil }
+    guard let lastCheck = defaults.object(forKey: lastUpdateCheckKey) as? Date else { return 0 }
+    let elapsed = max(0, now.timeIntervalSince(lastCheck))
+    return max(0, updateCheckInterval - elapsed)
+  }
+
+  static func recordUpdateCheck(
+    at date: Date = Date(),
+    defaults: UserDefaults = .standard
+  ) {
+    defaults.set(date, forKey: lastUpdateCheckKey)
   }
 
   static func language(defaults: UserDefaults = .standard) -> AppLanguage {

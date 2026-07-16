@@ -11,6 +11,7 @@ final class DashboardNavigation {
 
 struct UsageMenuView: View {
   let store: UsageStore
+  let updateStore: GitHubReleaseStore
   @Bindable var navigation: DashboardNavigation
   @Environment(\.appLanguage) private var language
   @Environment(\.colorScheme) private var colorScheme
@@ -110,10 +111,10 @@ struct UsageMenuView: View {
   private var pageContent: some View {
     switch navigation.selectedPage {
     case .settings:
-      SettingsPageView(store: store)
+      SettingsPageView(store: store, updateStore: updateStore)
     case .details:
       if let analytics = store.analytics {
-        DetailDashboardView(analytics: analytics)
+        DetailDashboardView(analytics: analytics, pricingCatalog: store.pricingCatalog)
       } else {
         loadingView
       }

@@ -9,13 +9,18 @@ final class UsageStore {
   private(set) var snapshot: UsageSnapshot?
   private(set) var diagnostics: CollectionDiagnostics?
   private(set) var lastUpdated: Date?
+  let pricingCatalog: PricingCatalog?
   private(set) var isRefreshing = false
   private var isLoopRunning = false
   private var refreshQueued = false
   private let collector: LocalUsageCollector
 
-  init(collector: LocalUsageCollector = LocalUsageCollector()) {
+  init(
+    collector: LocalUsageCollector = LocalUsageCollector(),
+    pricingCatalog: PricingCatalog? = try? PricingCatalog.bundled()
+  ) {
     self.collector = collector
+    self.pricingCatalog = pricingCatalog
   }
 
   var menuBarTokenTotal: Int? { snapshot?.total.total }

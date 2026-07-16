@@ -13,6 +13,7 @@ let package = Package(
   targets: [
     .target(
       name: "UnsealedSpellbookCore",
+      resources: [.copy("Resources/model-pricing.json")],
       linkerSettings: [.linkedLibrary("sqlite3")]
     ),
     .target(name: "UnsealedSpellbookLanguage"),

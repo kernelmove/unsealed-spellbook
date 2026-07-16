@@ -8,6 +8,24 @@ import UnsealedSpellbookLanguage
 
 @Suite("Design rendering")
 struct DesignAcceptanceTests {
+  @Test("US dollar amounts use compact international units without losing small values")
+  func compactCostFormatting() {
+    #expect(0.0.compactUSDCost() == "$0.00")
+    #expect(0.000_001.compactUSDCost() == "$0.000001")
+    #expect(100.0.compactUSDCost() == "$100.00")
+    #expect(999.99.compactUSDCost() == "$999.99")
+    #expect(1_000.0.compactUSDCost() == "$1K")
+    #expect(10_000.0.compactUSDCost() == "$10K")
+    #expect(100_000.0.compactUSDCost() == "$100K")
+    #expect(12_500.0.compactUSDCost() == "$12.5K")
+    #expect(999_999.0.compactUSDCost() == "$1M")
+    #expect(1_000_000.0.compactUSDCost() == "$1M")
+    #expect(10_000_000.0.compactUSDCost() == "$10M")
+    #expect(100_000_000.0.compactUSDCost() == "$100M")
+    #expect(1_000_000_000.0.compactUSDCost() == "$1B")
+    #expect(1_000_000_000_000.0.compactUSDCost() == "$1T")
+  }
+
   @Test("Overview, achievements, settings, and dark mode render at the prototype size")
   @MainActor
   func designScreens() async throws {
@@ -60,6 +78,31 @@ struct DesignAcceptanceTests {
     let silverAchievement = try #require(
       store.analytics?.achievements.first { $0.tier == .silver && $0.isVisible }
     )
+    let analytics = try #require(store.analytics)
+    let pricingCatalog = try #require(store.pricingCatalog)
+    let largeCostAnalytics = UsageAnalytics(
+      events: [
+        UsageEvent(
+          id: "large-cost-layout",
+          provider: .codex,
+          timestamp: analytics.now,
+          usage: TokenUsage(
+            input: 1_000_000_000_000,
+            output: 0,
+            total: 1_000_000_000_000
+          ),
+          model: ModelIdentity(tool: .codex, name: "gpt-5.6-sol")
+        )
+      ],
+      now: analytics.now,
+      calendar: analytics.calendar
+    )
+    #expect(
+      largeCostAnalytics.costSnapshot(
+        for: .last7Days,
+        catalog: pricingCatalog
+      ).total.total == 5_000_000
+    )
 
     let screens: [(String, NSImage?)] = [
       (
@@ -68,6 +111,17 @@ struct DesignAcceptanceTests {
       ),
       (
         "overview-dark", render(store: store, navigation: navigation, page: .details, scheme: .dark)
+      ),
+      (
+        "overview-cost-light",
+        snapshot(
+          of: DetailDashboardView(
+            analytics: largeCostAnalytics,
+            pricingCatalog: pricingCatalog,
+            initialPerspective: .cost
+          ),
+          scheme: .light
+        )
       ),
       (
         "achievements-light",
@@ -138,7 +192,11 @@ struct DesignAcceptanceTests {
   ) -> NSImage? {
     navigation.selectedPage = page
     return snapshot(
-      of: UsageMenuView(store: store, navigation: navigation),
+      of: UsageMenuView(
+        store: store,
+        updateStore: GitHubReleaseStore(currentVersion: "1.0.1"),
+        navigation: navigation
+      ),
       scheme: scheme
     )
   }

@@ -51,8 +51,10 @@ struct StatusBarInteractionTests {
       calendar: calendar
     )
 
-    let cells = DailyUsageHeatmapLayout.cells(
-      for: analytics.dailyUsage(for: .last7Days),
+    let cells = DailyMetricHeatmapLayout.cells(
+      for: analytics.dailyUsage(for: .last7Days).map {
+        DailyMetric(day: $0.day, value: Double($0.usage.total))
+      },
       now: now,
       calendar: calendar
     )
@@ -60,11 +62,20 @@ struct StatusBarInteractionTests {
 
     #expect(
       cells.count
-        == DailyUsageHeatmapLayout.columnCount * DailyUsageHeatmapLayout.rowCount
+        == DailyMetricHeatmapLayout.columnCount * DailyMetricHeatmapLayout.rowCount
     )
-    #expect(cells.count { $0.tokens != nil } == 7)
-    #expect(today.tokens == 100)
+    #expect(cells.count { $0.value != nil } == 7)
+    #expect(today.value == 100)
     #expect(today.level == 4)
-    #expect(DailyUsageHeatmapLayout.intensityLevel(tokens: 10, maximum: 1_000) == 2)
+    #expect(today.showsHoverDetail)
+    #expect(
+      !DailyMetricHeatmapCell(
+        day: now,
+        value: 100,
+        level: 4,
+        isFuture: true
+      ).showsHoverDetail
+    )
+    #expect(DailyMetricHeatmapLayout.intensityLevel(value: 10, maximum: 1_000) == 2)
   }
 }

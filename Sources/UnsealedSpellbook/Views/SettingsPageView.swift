@@ -6,14 +6,19 @@ import UnsealedSpellbookLanguage
 
 struct SettingsPageView: View {
   let store: UsageStore
+  let updateStore: GitHubReleaseStore
   @Environment(\.appLanguage) private var language
 
   @AppStorage(AppPreferences.providerKey(.claudeCode)) private var claudeEnabled = true
   @AppStorage(AppPreferences.providerKey(.codex)) private var codexEnabled = true
+  @AppStorage(AppPreferences.providerKey(.geminiCLI)) private var geminiEnabled = true
   @AppStorage(AppPreferences.providerKey(.ohMyPi)) private var ohMyPiEnabled = true
   @AppStorage(AppPreferences.providerKey(.openCode)) private var openCodeEnabled = true
   @AppStorage(AppPreferences.refreshIntervalKey) private var refreshInterval = 300.0
   @AppStorage(AppPreferences.showMenuBarTotalKey) private var showMenuBarTotal = true
+  @AppStorage(AppPreferences.automaticallyCheckForUpdatesKey) private
+    var automaticallyCheckUpdates =
+    true
   @AppStorage(AppPreferences.languageKey) private var languageCode =
     AppLanguage.simplifiedChinese.rawValue
   @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -33,6 +38,7 @@ struct SettingsPageView: View {
 
           VStack(spacing: SpellbookDesign.spacing) {
             privacySettings
+            updateSettings
             diagnostics
           }
           .frame(maxWidth: .infinity)
@@ -43,6 +49,7 @@ struct SettingsPageView: View {
     .background(SpellbookDesign.surfaceSoft)
     .onChange(of: claudeEnabled) { refreshAfterSettingsChange() }
     .onChange(of: codexEnabled) { refreshAfterSettingsChange() }
+    .onChange(of: geminiEnabled) { refreshAfterSettingsChange() }
     .onChange(of: ohMyPiEnabled) { refreshAfterSettingsChange() }
     .onChange(of: openCodeEnabled) { refreshAfterSettingsChange() }
   }
@@ -63,6 +70,7 @@ struct SettingsPageView: View {
     settingsCard(language.text(.settingsDataSources), systemImage: "externaldrive") {
       providerToggle(.claudeCode, isOn: $claudeEnabled)
       providerToggle(.codex, isOn: $codexEnabled)
+      providerToggle(.geminiCLI, isOn: $geminiEnabled)
       providerToggle(.ohMyPi, isOn: $ohMyPiEnabled)
       providerToggle(.openCode, isOn: $openCodeEnabled)
     }
@@ -119,10 +127,87 @@ struct SettingsPageView: View {
     settingsCard(language.text(.settingsLocalData), systemImage: "lock.shield") {
       sourcePath("Claude Code", LocalUsageLocations.standard.claudeCodeDirectory)
       sourcePath("Codex", LocalUsageLocations.standard.codexDirectory)
+      ForEach(
+        Array(LocalUsageLocations.standard.geminiCLIDirectories.enumerated()),
+        id: \.offset
+      ) { index, directory in
+        sourcePath(index == 0 ? "Gemini CLI" : "Gemini CLI Legacy", directory)
+      }
       sourcePath("OpenCode", LocalUsageLocations.standard.openCodeDatabase)
       if let directory = LocalUsageLocations.standard.ohMyPiDirectory {
         sourcePath("Oh My Pi", directory)
       }
+    }
+  }
+
+  private var updateSettings: some View {
+    settingsCard(language.text(.settingsUpdates), systemImage: "arrow.triangle.2.circlepath") {
+      Toggle(
+        language.text(.settingsAutomaticallyCheckUpdates),
+        isOn: $automaticallyCheckUpdates
+      )
+
+      HStack {
+        Text(
+          language.text(
+            .settingsCurrentVersionFormat,
+            updateStore.currentVersion
+          )
+        )
+        Spacer()
+        Button {
+          AppPreferences.recordUpdateCheck()
+          Task { await updateStore.check() }
+        } label: {
+          if updateStore.state == .checking {
+            HStack(spacing: 6) {
+              ProgressView().controlSize(.small)
+              Text(language.text(.settingsCheckingUpdates))
+            }
+          } else {
+            Text(language.text(.settingsCheckUpdates))
+          }
+        }
+        .disabled(updateStore.state == .checking)
+      }
+
+      updateStatus
+
+      Text(language.text(.settingsManualUpdateDescription))
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  @ViewBuilder
+  private var updateStatus: some View {
+    switch updateStore.state {
+    case .idle, .checking:
+      EmptyView()
+    case .upToDate(let latestTag):
+      Label(
+        language.text(.settingsUpToDateFormat, latestTag),
+        systemImage: "checkmark.circle.fill"
+      )
+      .foregroundStyle(SpellbookDesign.success)
+    case .updateAvailable(let latestTag):
+      HStack {
+        Label(
+          language.text(.settingsUpdateAvailableFormat, latestTag),
+          systemImage: "arrow.down.circle.fill"
+        )
+        .foregroundStyle(SpellbookDesign.accent)
+        Spacer()
+        Button(language.text(.settingsOpenRelease)) {
+          NSWorkspace.shared.open(updateStore.releasePageURL)
+        }
+      }
+    case .failed:
+      Label(
+        language.text(.settingsUpdateCheckFailed),
+        systemImage: "exclamationmark.triangle"
+      )
+      .foregroundStyle(.orange)
     }
   }
 

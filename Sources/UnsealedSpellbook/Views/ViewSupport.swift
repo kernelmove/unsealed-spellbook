@@ -72,6 +72,7 @@ extension AIProvider {
     case .codex: "Codex"
     case .ohMyPi: "Oh My Pi"
     case .openCode: "OpenCode"
+    case .geminiCLI: "Gemini CLI"
     }
   }
 
@@ -81,6 +82,7 @@ extension AIProvider {
     case .codex: "terminal"
     case .ohMyPi: "circle.hexagongrid"
     case .openCode: "chevron.left.forwardslash.chevron.right"
+    case .geminiCLI: "sparkles"
     }
   }
 
@@ -90,6 +92,7 @@ extension AIProvider {
     case .codex: SpellbookDesign.accent
     case .ohMyPi: Color(red: 0.12, green: 0.71, blue: 0.65)
     case .openCode: Color(red: 0.09, green: 0.55, blue: 0.82)
+    case .geminiCLI: Color(red: 0.22, green: 0.55, blue: 0.94)
     }
   }
 }
@@ -142,6 +145,45 @@ extension Int {
         .precision(.fractionLength(0...1))
         .locale(language.locale)
     )
+  }
+}
+
+extension Double {
+  func compactUSDCost() -> String {
+    let magnitude = abs(self)
+    let scales = [1.0, 1_000, 1_000_000, 1_000_000_000, 1_000_000_000_000]
+    let suffixes = ["", "K", "M", "B", "T"]
+    var unit = scales.lastIndex(where: { magnitude >= $0 }) ?? 0
+    var scaled = self / scales[unit]
+
+    func compactFractionDigits(for value: Double) -> Int {
+      if abs(value) < 10 { return 2 }
+      if abs(value) < 100 { return 1 }
+      return 0
+    }
+
+    var maximumFractionDigits = unit == 0 ? 2 : compactFractionDigits(for: scaled)
+    if unit > 0, unit < scales.count - 1 {
+      let roundingScale = pow(10, Double(maximumFractionDigits))
+      if (abs(scaled) * roundingScale).rounded() / roundingScale >= 1_000 {
+        unit += 1
+        scaled = self / scales[unit]
+        maximumFractionDigits = compactFractionDigits(for: scaled)
+      }
+    }
+
+    let fractionLength: ClosedRange<Int>
+    if unit == 0 {
+      fractionLength = magnitude > 0 && magnitude < 0.01 ? 2...6 : 2...2
+    } else {
+      fractionLength = 0...maximumFractionDigits
+    }
+    let number = scaled.formatted(
+      .number
+        .precision(.fractionLength(fractionLength))
+        .locale(Locale(identifier: "en_US"))
+    )
+    return "$\(number)\(suffixes[unit])"
   }
 }
 

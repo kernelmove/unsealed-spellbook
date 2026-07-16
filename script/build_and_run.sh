@@ -5,6 +5,8 @@ MODE="${1:-run}"
 APP_NAME="UnsealedSpellbook"
 BUNDLE_ID="com.unsealed-spellbook.app"
 MIN_SYSTEM_VERSION="14.0"
+APP_VERSION="${APP_VERSION:-1.0.1}"
+BUILD_NUMBER="${BUILD_NUMBER:-1}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -16,6 +18,7 @@ APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ICON="$ROOT_DIR/Assets/AppIcon.icns"
 BADGE_ARTWORK="$ROOT_DIR/Sources/UnsealedSpellbook/Resources/Badges"
+PRICING_RULES="$ROOT_DIR/Sources/UnsealedSpellbookCore/Resources/model-pricing.json"
 
 cd "$ROOT_DIR"
 if [[ -d /Applications/Xcode.app ]]; then
@@ -31,6 +34,7 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$APP_ICON" "$APP_RESOURCES/AppIcon.icns"
+cp "$PRICING_RULES" "$APP_RESOURCES/model-pricing.json"
 mkdir -p "$APP_RESOURCES/Badges"
 cp "$BADGE_ARTWORK"/*.png "$APP_RESOURCES/Badges/"
 chmod +x "$APP_BINARY"
@@ -48,6 +52,10 @@ cat >"$INFO_PLIST" <<PLIST
   <string>AppIcon</string>
   <key>CFBundleName</key>
   <string>$APP_NAME</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$APP_VERSION</string>
+  <key>CFBundleVersion</key>
+  <string>$BUILD_NUMBER</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>

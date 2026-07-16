@@ -3,6 +3,7 @@ import Foundation
 public enum AIProvider: String, CaseIterable, Sendable {
   case claudeCode
   case codex
+  case geminiCLI
   case ohMyPi
   case openCode
 }

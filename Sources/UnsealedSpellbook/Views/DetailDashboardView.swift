@@ -5,19 +5,57 @@ import UnsealedSpellbookLanguage
 
 struct DetailDashboardView: View {
   let analytics: UsageAnalytics
+  let pricingCatalog: PricingCatalog?
 
   @State private var period: UsagePeriod = .last7Days
   @State private var selectedProvider: AIProvider = .codex
+  @State private var perspective: UsagePerspective
+
+  init(
+    analytics: UsageAnalytics,
+    pricingCatalog: PricingCatalog?,
+    initialPerspective: UsagePerspective = .tokens
+  ) {
+    self.analytics = analytics
+    self.pricingCatalog = pricingCatalog
+    _perspective = State(initialValue: initialPerspective)
+  }
 
   var body: some View {
     ScrollView {
       VStack(spacing: SpellbookDesign.spacing) {
+        HStack(spacing: 8) {
+          Spacer()
+          SpellbookSegmentedControl(
+            options: pricingCatalog == nil ? [.tokens] : UsagePerspective.allCases,
+            selection: $perspective,
+            horizontalPadding: 10
+          ) { $0.title(language: language) }
+          .font(.system(size: 12, weight: .medium))
+          .frame(width: 150)
+
+          if perspective == .cost {
+            Link(destination: PricingDocumentation.url) {
+              Image(systemName: "info.circle")
+            }
+            .help(language.text(.actionOpenPricingRules))
+            .accessibilityLabel(language.text(.actionOpenPricingRules))
+          }
+        }
+
         HStack(alignment: .top, spacing: SpellbookDesign.spacing) {
-          TotalUsagePanel(analytics: analytics, period: $period)
-            .frame(maxWidth: .infinity)
+          TotalUsagePanel(
+            analytics: analytics,
+            catalog: pricingCatalog,
+            perspective: perspective,
+            period: $period
+          )
+          .frame(maxWidth: .infinity)
 
           ToolDetailPanel(
             analytics: analytics,
+            catalog: pricingCatalog,
+            perspective: perspective,
             provider: $selectedProvider,
             period: period
           )
@@ -25,31 +63,74 @@ struct DetailDashboardView: View {
           .frame(maxHeight: .infinity)
         }
 
-        ToolTrendPanel(analytics: analytics, provider: selectedProvider, period: period)
-        ModelRankingPanel(analytics: analytics)
+        ToolTrendPanel(
+          analytics: analytics,
+          catalog: pricingCatalog,
+          perspective: perspective,
+          provider: selectedProvider,
+          period: period
+        )
+        ModelRankingPanel(
+          analytics: analytics,
+          catalog: pricingCatalog,
+          perspective: perspective
+        )
       }
       .padding(SpellbookDesign.spacing)
     }
     .background(SpellbookDesign.surfaceSoft)
   }
+
+  @Environment(\.appLanguage) private var language
+}
+
+enum UsagePerspective: CaseIterable, Hashable {
+  case tokens
+  case cost
+
+  func title(language: AppLanguage) -> String {
+    language.text(self == .tokens ? .perspectiveTokens : .perspectiveCost)
+  }
+}
+
+private enum PricingDocumentation {
+  static let url = URL(
+    string: "https://github.com/kernelmove/unsealed-spellbook/blob/main/docs/pricing.md"
+  )!
 }
 
 private struct TotalUsagePanel: View {
   let analytics: UsageAnalytics
+  let catalog: PricingCatalog?
+  let perspective: UsagePerspective
   @Binding var period: UsagePeriod
   @Environment(\.appLanguage) private var language
 
   var body: some View {
-    let snapshot = analytics.snapshot(for: period)
-    let dailyUsage = analytics.dailyUsage(for: period)
+    let snapshot = perspective == .tokens ? analytics.snapshot(for: period) : nil
+    let dailyUsage = perspective == .tokens ? analytics.dailyUsage(for: period) : []
+    let costSnapshot =
+      perspective == .cost
+      ? catalog.map { analytics.costSnapshot(for: period, catalog: $0) }
+      : nil
+    let dailyCost =
+      perspective == .cost
+      ? catalog.map { analytics.dailyCost(for: period, catalog: $0) } ?? []
+      : []
 
     VStack(alignment: .leading, spacing: 0) {
       HStack(alignment: .top, spacing: 16) {
         VStack(alignment: .leading, spacing: 7) {
-          Text(language.text(.overviewTotalTokens))
-            .font(.system(size: 15, weight: .semibold))
-          Text(snapshot.total.total.compactTokenCount(language: language))
+          Text(
+            language.text(
+              perspective == .tokens ? .overviewTotalTokens : .overviewTotalCost
+            )
+          )
+          .font(.system(size: 15, weight: .semibold))
+          Text(totalValue(snapshot: snapshot, costSnapshot: costSnapshot))
             .font(.system(size: 48, weight: .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
             .tracking(-1.9)
             .monospacedDigit()
             .contentTransition(.numericText())
@@ -63,19 +144,49 @@ private struct TotalUsagePanel: View {
         PeriodTabs(selection: $period)
       }
 
-      Text(language.text(.overviewToolUsageShare))
-        .font(.system(size: 15, weight: .semibold))
-        .padding(.top, 28)
-        .padding(.bottom, 12)
+      Text(
+        language.text(
+          perspective == .tokens ? .overviewToolUsageShare : .overviewToolCostShare
+        )
+      )
+      .font(.system(size: 15, weight: .semibold))
+      .padding(.top, 28)
+      .padding(.bottom, 12)
 
       VStack(spacing: 13) {
         ForEach(AIProvider.allCases, id: \.rawValue) { provider in
-          ProviderContributionRow(
-            provider: provider,
-            usage: snapshot.providers[provider] ?? .zero,
-            total: snapshot.total.total
-          )
+          if perspective == .tokens {
+            ProviderContributionRow(
+              provider: provider,
+              value: Double(snapshot?.providers[provider]?.total ?? 0),
+              total: Double(snapshot?.total.total ?? 0),
+              valueText: (snapshot?.providers[provider]?.total ?? 0).compactTokenCount(
+                language: language
+              )
+            )
+          } else {
+            ProviderContributionRow(
+              provider: provider,
+              value: costSnapshot?.providers[provider]?.total ?? 0,
+              total: costSnapshot?.total.total ?? 0,
+              valueText: (costSnapshot?.providers[provider]?.total ?? 0).compactUSDCost()
+            )
+          }
         }
+      }
+
+      if perspective == .cost, let costSnapshot, costSnapshot.unpricedTokens > 0 {
+        Label(
+          language.text(
+            .overviewUnpricedFormat,
+            costSnapshot.unpricedTokens,
+            costSnapshot.unpricedModels.count
+          ),
+          systemImage: "exclamationmark.circle"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.top, 12)
       }
 
       Divider()
@@ -93,17 +204,35 @@ private struct TotalUsagePanel: View {
       }
       .padding(.bottom, 6)
 
-      DailyUsageHeatmap(
-        data: dailyUsage,
+      DailyMetricHeatmap(
+        data: perspective == .tokens
+          ? dailyUsage.map { DailyMetric(day: $0.day, value: Double($0.usage.total)) }
+          : dailyCost.map { DailyMetric(day: $0.day, value: $0.cost.total) },
         now: analytics.now,
         calendar: analytics.calendar,
-        color: SpellbookDesign.metricBlue
+        color: SpellbookDesign.metricBlue,
+        accessibilityTitle: language.text(
+          perspective == .tokens ? .accessibilityDailyHeatmap : .accessibilityDailyCostChart
+        ),
+        valueText: { value in
+          if perspective == .tokens {
+            return Int(value).formatted(.number.locale(language.locale)) + " Token"
+          }
+          return value.compactUSDCost()
+        }
       )
       .frame(height: 110)
     }
     .padding(.vertical, 24)
     .padding(.horizontal, 28)
     .spellbookPanel()
+  }
+
+  private func totalValue(snapshot: UsageSnapshot?, costSnapshot: CostSnapshot?) -> String {
+    if perspective == .tokens {
+      return (snapshot?.total.total ?? 0).compactTokenCount(language: language)
+    }
+    return (costSnapshot?.total.total ?? 0).compactUSDCost()
   }
 
   private var periodCaption: String {
@@ -119,6 +248,8 @@ private struct TotalUsagePanel: View {
 
 private struct ToolDetailPanel: View {
   let analytics: UsageAnalytics
+  let catalog: PricingCatalog?
+  let perspective: UsagePerspective
   @Binding var provider: AIProvider
   let period: UsagePeriod
   @Environment(\.appLanguage) private var language
@@ -129,35 +260,59 @@ private struct ToolDetailPanel: View {
   ]
 
   var body: some View {
-    let snapshot = analytics.snapshot(for: period, provider: provider)
+    let snapshot =
+      perspective == .tokens
+      ? analytics.snapshot(for: period, provider: provider)
+      : nil
+    let cost =
+      perspective == .cost
+      ? catalog.map {
+        analytics.costSnapshot(for: period, provider: provider, catalog: $0).total
+      }
+      : nil
 
     VStack(alignment: .leading, spacing: 14) {
       Text(language.text(.toolDetails))
         .font(.system(size: 18, weight: .semibold))
 
-      SpellbookSegmentedControl(
-        options: AIProvider.allCases,
-        selection: $provider,
-        horizontalPadding: 3
-      ) { $0 == .claudeCode ? "Claude" : $0.displayName }
+      ScrollView(.horizontal, showsIndicators: false) {
+        SpellbookSegmentedControl(
+          options: AIProvider.allCases,
+          selection: $provider,
+          horizontalPadding: 7
+        ) { shortName($0) }
+        .fixedSize(horizontal: true, vertical: false)
+      }
       .font(.system(size: 11))
       .accessibilityLabel(language.text(.accessibilitySelectTool))
 
       LazyVGrid(columns: columns, spacing: 10) {
         MetricTile(
-          title: language.text(.metricTotal), value: snapshot.total.total,
+          title: language.text(.metricTotal),
+          value: metricValue(tokens: snapshot?.total.total ?? 0, cost: cost?.total),
+          unit: metricUnit,
           color: provider.tintColor)
         MetricTile(
-          title: language.text(.metricInput), value: snapshot.total.input,
+          title: language.text(.metricInput),
+          value: metricValue(tokens: snapshot?.total.input ?? 0, cost: cost?.input),
+          unit: metricUnit,
           color: SpellbookDesign.metricBlue)
         MetricTile(
           title: language.text(.metricOutput),
-          value: snapshot.total.output,
+          value: metricValue(
+            tokens: (snapshot?.total.output ?? 0) + (snapshot?.total.reasoning ?? 0),
+            cost: cost?.output
+          ),
+          unit: metricUnit,
           color: SpellbookDesign.metricPurple
         )
         MetricTile(
           title: language.text(.metricCache),
-          value: snapshot.total.cacheRead + snapshot.total.cacheWrite,
+          value: metricValue(
+            tokens: (snapshot?.total.cacheRead ?? 0) + (snapshot?.total.cacheWrite ?? 0),
+            cost: (cost?.cacheRead ?? 0) + (cost?.cacheWrite ?? 0)
+          ),
+          unit: metricUnit,
           color: SpellbookDesign.success
         )
       }
@@ -172,16 +327,44 @@ private struct ToolDetailPanel: View {
     .frame(maxHeight: .infinity, alignment: .topLeading)
     .spellbookPanel()
   }
+
+  private var metricUnit: String { perspective == .tokens ? "Token" : "USD" }
+
+  private func metricValue(tokens: Int, cost: Double?) -> String {
+    perspective == .tokens
+      ? tokens.compactTokenCount(language: language)
+      : (cost ?? 0).compactUSDCost()
+  }
+
+  private func shortName(_ provider: AIProvider) -> String {
+    switch provider {
+    case .claudeCode: "Claude"
+    case .ohMyPi: "OMP"
+    case .geminiCLI: "Gemini"
+    default: provider.displayName
+    }
+  }
 }
 
 private struct ToolTrendPanel: View {
   let analytics: UsageAnalytics
+  let catalog: PricingCatalog?
+  let perspective: UsagePerspective
   let provider: AIProvider
   let period: UsagePeriod
   @Environment(\.appLanguage) private var language
 
   var body: some View {
-    let dailyUsage = analytics.dailyUsage(for: period, provider: provider)
+    let dailyUsage =
+      perspective == .tokens
+      ? analytics.dailyUsage(for: period, provider: provider)
+      : []
+    let dailyCost =
+      perspective == .cost
+      ? catalog.map {
+        analytics.dailyCost(for: period, provider: provider, catalog: $0)
+      } ?? []
+      : []
 
     VStack(alignment: .leading, spacing: 10) {
       HStack {
@@ -193,8 +376,23 @@ private struct ToolTrendPanel: View {
           .foregroundStyle(.secondary)
       }
 
-      DailyUsageChart(data: dailyUsage, color: provider.tintColor)
-        .frame(height: 170)
+      DailyMetricChart(
+        data: perspective == .tokens
+          ? dailyUsage.map { DailyMetric(day: $0.day, value: Double($0.usage.total)) }
+          : dailyCost.map { DailyMetric(day: $0.day, value: $0.cost.total) },
+        color: provider.tintColor,
+        yAxisTitle: language.text(perspective == .tokens ? .chartToken : .chartCost),
+        accessibilityTitle: language.text(
+          perspective == .tokens
+            ? .accessibilityDailyTokenChart : .accessibilityDailyCostChart
+        ),
+        valueText: { value in
+          perspective == .tokens
+            ? Int(value).compactTokenCount(language: language)
+            : value.compactUSDCost()
+        }
+      )
+      .frame(height: 170)
     }
     .padding(20)
     .spellbookPanel()
@@ -203,35 +401,69 @@ private struct ToolTrendPanel: View {
 
 private struct ModelRankingPanel: View {
   let analytics: UsageAnalytics
+  let catalog: PricingCatalog?
+  let perspective: UsagePerspective
   @Environment(\.appLanguage) private var language
 
   var body: some View {
-    let rankings = analytics.modelRankings(for: .today)
+    let rankings = perspective == .tokens ? analytics.modelRankings(for: .today) : []
+    let costRankings =
+      perspective == .cost
+      ? catalog.map {
+        analytics.modelCostRankings(for: .today, catalog: $0)
+      } ?? []
+      : []
+    let count = perspective == .tokens ? rankings.count : costRankings.count
 
     VStack(alignment: .leading, spacing: 12) {
       HStack {
         VStack(alignment: .leading, spacing: 2) {
           Text(language.text(.rankingToday))
             .font(.headline)
-          Text(language.text(.rankingDescription))
-            .font(.caption)
-            .foregroundStyle(.secondary)
+          Text(
+            language.text(
+              perspective == .tokens ? .rankingDescription : .rankingCostDescription
+            )
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
         }
         Spacer()
-        Text(language.text(.rankingModelCountFormat, rankings.count))
+        Text(language.text(.rankingModelCountFormat, count))
           .font(.caption.monospacedDigit())
           .foregroundStyle(.secondary)
       }
 
-      if rankings.isEmpty {
+      if count == 0 {
         Label(language.text(.rankingEmpty), systemImage: "chart.bar.xaxis")
           .foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, minHeight: 80)
       } else {
-        ForEach(Array(rankings.enumerated()), id: \.element.id) { index, summary in
-          ModelRankingRow(rank: index + 1, summary: summary)
-          if index < rankings.count - 1 {
-            Divider().overlay(SpellbookDesign.line)
+        if perspective == .tokens {
+          ForEach(Array(rankings.enumerated()), id: \.element.id) { index, summary in
+            ModelRankingRow(
+              rank: index + 1,
+              model: summary.model,
+              usage: summary.usage,
+              recordCount: summary.recordCount,
+              valueText: summary.usage.total.compactTokenCount(language: language)
+            )
+            if index < rankings.count - 1 {
+              Divider().overlay(SpellbookDesign.line)
+            }
+          }
+        } else {
+          ForEach(Array(costRankings.enumerated()), id: \.element.id) { index, summary in
+            ModelRankingRow(
+              rank: index + 1,
+              model: summary.model,
+              usage: summary.usage,
+              recordCount: summary.recordCount,
+              valueText: summary.cost?.total.compactUSDCost() ?? "—"
+            )
+            if index < costRankings.count - 1 {
+              Divider().overlay(SpellbookDesign.line)
+            }
           }
         }
       }
@@ -261,12 +493,12 @@ struct PeriodTabs: View {
 
 private struct ProviderContributionRow: View {
   let provider: AIProvider
-  let usage: TokenUsage
-  let total: Int
-  @Environment(\.appLanguage) private var language
+  let value: Double
+  let total: Double
+  let valueText: String
 
   private var share: Double {
-    total == 0 ? 0 : Double(usage.total) / Double(total)
+    total == 0 ? 0 : value / total
   }
 
   var body: some View {
@@ -293,27 +525,23 @@ private struct ProviderContributionRow: View {
       }
       .frame(height: 7)
 
-      Text(usage.total.compactTokenCount(language: language))
+      Text(valueText)
         .font(.caption.monospacedDigit())
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
         .foregroundStyle(.secondary)
         .frame(width: 78, alignment: .trailing)
     }
     .accessibilityElement(children: .combine)
-    .accessibilityLabel(
-      language.text(
-        .accessibilityProviderTokensFormat,
-        provider.displayName,
-        usage.total.formatted(.number.locale(language.locale))
-      )
-    )
+    .accessibilityLabel("\(provider.displayName), \(valueText)")
   }
 }
 
 private struct MetricTile: View {
   let title: String
-  let value: Int
+  let value: String
+  let unit: String
   let color: Color
-  @Environment(\.appLanguage) private var language
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -321,12 +549,14 @@ private struct MetricTile: View {
         .font(.caption)
         .foregroundStyle(.secondary)
       Spacer(minLength: 12)
-      Text(value.compactTokenCount(language: language))
+      Text(value)
         .font(.system(size: 23, weight: .semibold))
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
         .tracking(-0.45)
         .monospacedDigit()
         .foregroundStyle(color)
-      Text("Token")
+      Text(unit)
         .font(.caption)
         .foregroundStyle(.tertiary)
         .padding(.top, 4)
@@ -345,24 +575,30 @@ private struct MetricTile: View {
   }
 }
 
-struct DailyUsageHeatmapCell: Identifiable {
+struct DailyMetric: Identifiable {
   let day: Date
-  let tokens: Int?
-  let level: Int
-  let isFuture: Bool
-
+  let value: Double
   var id: Date { day }
 }
 
-enum DailyUsageHeatmapLayout {
+struct DailyMetricHeatmapCell: Identifiable {
+  let day: Date
+  let value: Double?
+  let level: Int
+  let isFuture: Bool
+  var id: Date { day }
+  var showsHoverDetail: Bool { value != nil && !isFuture }
+}
+
+enum DailyMetricHeatmapLayout {
   static let columnCount = 52
   static let rowCount = 7
 
   static func cells(
-    for data: [DailyUsage],
+    for data: [DailyMetric],
     now: Date,
     calendar: Calendar
-  ) -> [DailyUsageHeatmapCell] {
+  ) -> [DailyMetricHeatmapCell] {
     guard
       let firstDay = data.first?.day,
       let lastDay = data.last?.day,
@@ -378,95 +614,161 @@ enum DailyUsageHeatmapLayout {
     let selectedEnd = calendar.startOfDay(for: lastDay)
     let today = calendar.startOfDay(for: now)
     let totals = Dictionary(
-      uniqueKeysWithValues: data.map {
-        (calendar.startOfDay(for: $0.day), $0.usage.total)
-      }
+      uniqueKeysWithValues: data.map { (calendar.startOfDay(for: $0.day), $0.value) }
     )
-    let maximum = max(1, totals.values.max() ?? 0)
+    let maximum = max(Double.leastNonzeroMagnitude, totals.values.max() ?? 0)
 
-    return (0..<(columnCount * rowCount)).compactMap { offset in
-      guard let day = calendar.date(byAdding: .day, value: offset, to: gridStart) else {
-        return nil
+    return (0..<(columnCount * rowCount))
+      .compactMap { offset in
+        guard let day = calendar.date(byAdding: .day, value: offset, to: gridStart) else {
+          return nil
+        }
+        let value = day >= selectedStart && day <= selectedEnd ? totals[day] ?? 0 : nil
+        let isFuture = day > today
+        return DailyMetricHeatmapCell(
+          day: day,
+          value: value,
+          level: isFuture ? 0 : intensityLevel(value: value ?? 0, maximum: maximum),
+          isFuture: isFuture
+        )
       }
-      let isSelected = day >= selectedStart && day <= selectedEnd
-      let tokens = isSelected ? totals[day] ?? 0 : nil
-      let isFuture = day > today
-      return DailyUsageHeatmapCell(
-        day: day,
-        tokens: tokens,
-        level: isFuture ? 0 : intensityLevel(tokens: tokens ?? 0, maximum: maximum),
-        isFuture: isFuture
-      )
-    }
   }
 
-  static func intensityLevel(tokens: Int, maximum: Int) -> Int {
-    guard tokens > 0, maximum > 0 else { return 0 }
-    let scaled = log1p(Double(tokens)) / log1p(Double(maximum))
+  static func intensityLevel(value: Double, maximum: Double) -> Int {
+    guard value > 0, maximum > 0 else { return 0 }
+    let scaled = log1p(value) / log1p(maximum)
     return min(4, max(1, Int(ceil(scaled * 4))))
   }
 }
 
-private struct DailyUsageHeatmap: View {
-  let data: [DailyUsage]
+private struct DailyMetricHeatmap: View {
+  let data: [DailyMetric]
   let now: Date
   let calendar: Calendar
   let color: Color
+  let accessibilityTitle: String
+  let valueText: (Double) -> String
   @Environment(\.appLanguage) private var language
+  @State private var hoveredDay: Date?
 
   private let cellSize: CGFloat = 9
   private let spacing: CGFloat = 2.5
+  private let hoverCardWidth: CGFloat = 144
+  private let hoverCardHeight: CGFloat = 42
   private let rows = Array(
     repeating: GridItem(.fixed(9), spacing: 2.5),
-    count: DailyUsageHeatmapLayout.rowCount
+    count: DailyMetricHeatmapLayout.rowCount
   )
 
-  private var cells: [DailyUsageHeatmapCell] {
-    DailyUsageHeatmapLayout.cells(for: data, now: now, calendar: calendar)
-  }
-
-  private var monthMarkers: [(column: Int, day: Date)] {
+  private func monthMarkers(
+    in cells: [DailyMetricHeatmapCell]
+  ) -> [(column: Int, day: Date)] {
     var previousMonth: Int?
     return cells.enumerated().compactMap { index, cell in
       let month = calendar.component(.month, from: cell.day)
       guard month != previousMonth else { return nil }
       previousMonth = month
       if index == 0, calendar.component(.day, from: cell.day) > 7 { return nil }
-      return (index / DailyUsageHeatmapLayout.rowCount, cell.day)
+      return (index / DailyMetricHeatmapLayout.rowCount, cell.day)
     }
   }
 
   private var gridWidth: CGFloat {
-    CGFloat(DailyUsageHeatmapLayout.columnCount) * cellSize
-      + CGFloat(DailyUsageHeatmapLayout.columnCount - 1) * spacing
+    CGFloat(DailyMetricHeatmapLayout.columnCount) * cellSize
+      + CGFloat(DailyMetricHeatmapLayout.columnCount - 1) * spacing
   }
 
   private var gridHeight: CGFloat {
-    CGFloat(DailyUsageHeatmapLayout.rowCount) * cellSize
-      + CGFloat(DailyUsageHeatmapLayout.rowCount - 1) * spacing
+    CGFloat(DailyMetricHeatmapLayout.rowCount) * cellSize
+      + CGFloat(DailyMetricHeatmapLayout.rowCount - 1) * spacing
   }
 
   private var accessibilitySummary: String {
     data.map {
-      language.text(
-        .heatmapTokensFormat,
-        $0.day.formatted(.dateTime.month().day().locale(language.locale)),
-        $0.usage.total.formatted(.number.locale(language.locale))
-      )
+      "\($0.day.formatted(.dateTime.month().day().locale(language.locale))), \(valueText($0.value))"
     }.joined(separator: "; ")
   }
 
   var body: some View {
+    let cells = DailyMetricHeatmapLayout.cells(for: data, now: now, calendar: calendar)
+    let hoveredCell = cells.first { $0.day == hoveredDay && $0.showsHoverDetail }
+    let monthMarkers = monthMarkers(in: cells)
+
     VStack(alignment: .leading, spacing: 8) {
-      LazyHGrid(rows: rows, spacing: spacing) {
-        ForEach(cells) { cell in
-          let helpText = helpText(for: cell)
-          RoundedRectangle(cornerRadius: 3, style: .continuous)
-            .fill(fill(for: cell))
-            .frame(width: cellSize, height: cellSize)
-            .help(helpText)
-            .accessibilityHidden(cell.tokens == nil || cell.isFuture)
-            .accessibilityLabel(helpText)
+      ZStack(alignment: .topLeading) {
+        LazyHGrid(rows: rows, spacing: spacing) {
+          ForEach(cells) { cell in
+            let helpText = helpText(for: cell)
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+              .fill(fill(for: cell))
+              .frame(width: cellSize, height: cellSize)
+              .contentShape(Rectangle())
+              .onHover { isHovering in
+                guard cell.showsHoverDetail else { return }
+                if isHovering {
+                  hoveredDay = cell.day
+                } else if hoveredDay == cell.day {
+                  hoveredDay = nil
+                }
+              }
+              .accessibilityHidden(!cell.showsHoverDetail)
+              .accessibilityLabel(helpText)
+          }
+        }
+
+        if let hoveredCell,
+          let value = hoveredCell.value,
+          let index = cells.firstIndex(where: { $0.id == hoveredCell.id })
+        {
+          let column = index / DailyMetricHeatmapLayout.rowCount
+          let row = index % DailyMetricHeatmapLayout.rowCount
+          let cellX = CGFloat(column) * (cellSize + spacing)
+          let cellY = CGFloat(row) * (cellSize + spacing)
+          let preferredX =
+            column < DailyMetricHeatmapLayout.columnCount / 2
+            ? cellX + cellSize + 8
+            : cellX - hoverCardWidth - 8
+          let cardX = min(max(0, preferredX), gridWidth - hoverCardWidth)
+          let cardY = min(
+            max(0, cellY + cellSize / 2 - hoverCardHeight / 2),
+            gridHeight - hoverCardHeight
+          )
+
+          VStack(alignment: .leading, spacing: 3) {
+            Text(
+              hoveredCell.day.formatted(
+                .dateTime.year().month().day().locale(language.locale)
+              )
+            )
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+
+            HStack(spacing: 6) {
+              Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+              Text(valueText(value))
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+            }
+          }
+          .padding(.horizontal, 9)
+          .frame(
+            width: hoverCardWidth,
+            height: hoverCardHeight,
+            alignment: .leading
+          )
+          .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+          .overlay {
+            RoundedRectangle(cornerRadius: 8)
+              .stroke(SpellbookDesign.line, lineWidth: 1)
+          }
+          .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
+          .offset(x: cardX, y: cardY)
+          .allowsHitTesting(false)
+          .accessibilityHidden(true)
+          .zIndex(1)
         }
       }
       .frame(width: gridWidth, height: gridHeight)
@@ -487,53 +789,48 @@ private struct DailyUsageHeatmap: View {
     }
     .frame(maxWidth: .infinity, alignment: .center)
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(language.text(.accessibilityDailyHeatmap))
+    .accessibilityLabel(accessibilityTitle)
     .accessibilityValue(accessibilitySummary)
   }
 
-  private func fill(for cell: DailyUsageHeatmapCell) -> Color {
-    if cell.tokens == nil { return SpellbookDesign.track.opacity(0.55) }
+  private func fill(for cell: DailyMetricHeatmapCell) -> Color {
+    if cell.value == nil { return SpellbookDesign.track.opacity(0.55) }
     if cell.isFuture { return SpellbookDesign.track.opacity(0.70) }
     guard cell.level > 0 else { return SpellbookDesign.track }
     return color.opacity([0, 0.25, 0.45, 0.70, 1][cell.level])
   }
 
-  private func helpText(for cell: DailyUsageHeatmapCell) -> String {
+  private func helpText(for cell: DailyMetricHeatmapCell) -> String {
     let date = cell.day.formatted(
       .dateTime.year().month().day().locale(language.locale)
     )
-    guard let tokens = cell.tokens else {
+    guard let value = cell.value else {
       return language.text(.heatmapOutsidePeriodFormat, date)
     }
     if cell.isFuture { return language.text(.heatmapFutureFormat, date) }
-    return language.text(
-      .heatmapTokensFormat,
-      date,
-      tokens.formatted(.number.locale(language.locale))
-    )
+    return "\(date), \(valueText(value))"
   }
 }
 
-private struct DailyUsageChart: View {
-  let data: [DailyUsage]
+private struct DailyMetricChart: View {
+  let data: [DailyMetric]
   let color: Color
+  let yAxisTitle: String
+  let accessibilityTitle: String
+  let valueText: (Double) -> String
   @Environment(\.appLanguage) private var language
 
-  private var maximum: Int {
-    max(1, data.map { $0.usage.total }.max() ?? 0)
+  private var maximum: Double {
+    max(Double.leastNonzeroMagnitude, data.map(\.value).max() ?? 0)
   }
 
-  private var total: Int {
-    data.reduce(0) { $0 + $1.usage.total }
+  private var total: Double {
+    data.reduce(0) { $0 + $1.value }
   }
 
   private var accessibilitySummary: String {
     data.map {
-      language.text(
-        .heatmapTokensFormat,
-        $0.day.formatted(.dateTime.month().day().locale(language.locale)),
-        $0.usage.total.formatted(.number.locale(language.locale))
-      )
+      "\($0.day.formatted(.dateTime.month().day().locale(language.locale))), \(valueText($0.value))"
     }.joined(separator: "; ")
   }
 
@@ -542,7 +839,7 @@ private struct DailyUsageChart: View {
       Chart(data) { item in
         AreaMark(
           x: .value(language.text(.chartDate), item.day, unit: .day),
-          y: .value(language.text(.chartToken), item.usage.total)
+          y: .value(yAxisTitle, item.value)
         )
         .interpolationMethod(.monotone)
         .foregroundStyle(
@@ -555,7 +852,7 @@ private struct DailyUsageChart: View {
 
         LineMark(
           x: .value(language.text(.chartDate), item.day, unit: .day),
-          y: .value(language.text(.chartToken), item.usage.total)
+          y: .value(yAxisTitle, item.value)
         )
         .interpolationMethod(.monotone)
         .foregroundStyle(color)
@@ -564,7 +861,7 @@ private struct DailyUsageChart: View {
         if item.id == data.last?.id {
           PointMark(
             x: .value(language.text(.chartDate), item.day, unit: .day),
-            y: .value(language.text(.chartToken), item.usage.total)
+            y: .value(yAxisTitle, item.value)
           )
           .foregroundStyle(SpellbookDesign.surface)
           .symbolSize(54)
@@ -585,8 +882,8 @@ private struct DailyUsageChart: View {
         AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
           AxisGridLine().foregroundStyle(SpellbookDesign.line)
           AxisValueLabel {
-            if let tokens = value.as(Int.self) {
-              Text(tokens.compactTokenCount(language: language))
+            if let metric = value.as(Double.self) {
+              Text(valueText(metric))
             }
           }
         }
@@ -599,22 +896,26 @@ private struct DailyUsageChart: View {
       }
     }
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(language.text(.accessibilityDailyTokenChart))
+    .accessibilityLabel(accessibilityTitle)
     .accessibilityValue(accessibilitySummary)
   }
-
 }
 
 private struct ModelRankingRow: View {
   let rank: Int
-  let summary: ModelUsageSummary
+  let model: ModelIdentity
+  let usage: TokenUsage
+  let recordCount: Int
+  let valueText: String
   @Environment(\.appLanguage) private var language
 
   private var source: String {
-    [summary.model.tool?.displayName, summary.model.backend]
+    [model.tool?.displayName, model.backend]
       .compactMap { $0 }
       .joined(separator: " · ")
   }
+
+  private var cacheHitRate: Double { usage.cacheHitRate }
 
   var body: some View {
     HStack(alignment: .top, spacing: 11) {
@@ -627,7 +928,7 @@ private struct ModelRankingRow: View {
       VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .firstTextBaseline) {
           VStack(alignment: .leading, spacing: 2) {
-            Text(summary.model.localizedDisplayName(language: language))
+            Text(model.localizedDisplayName(language: language))
               .font(.subheadline.weight(.semibold))
               .lineLimit(1)
             if !source.isEmpty {
@@ -638,9 +939,12 @@ private struct ModelRankingRow: View {
           }
           Spacer()
           VStack(alignment: .trailing, spacing: 2) {
-            Text(summary.usage.total.compactTokenCount(language: language))
+            Text(valueText)
               .font(.subheadline.weight(.semibold).monospacedDigit())
-            Text(language.text(.rankingUsageRecordsFormat, summary.recordCount))
+              .lineLimit(1)
+              .minimumScaleFactor(0.5)
+              .layoutPriority(1)
+            Text(language.text(.rankingUsageRecordsFormat, recordCount))
               .font(.caption2)
               .foregroundStyle(.secondary)
           }
@@ -650,10 +954,10 @@ private struct ModelRankingRow: View {
           Text(language.text(.cacheHit))
             .font(.caption)
             .foregroundStyle(.secondary)
-          ProgressView(value: summary.cacheHitRate)
+          ProgressView(value: cacheHitRate)
             .tint(SpellbookDesign.success)
           Text(
-            summary.cacheHitRate.formatted(
+            cacheHitRate.formatted(
               .percent.precision(.fractionLength(0)).locale(language.locale)
             )
           )
