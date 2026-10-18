@@ -30,6 +30,28 @@ struct ParserAcceptanceTests {
     #expect(result.events.first?.model == ModelIdentity(tool: .claudeCode, name: "claude-sonnet"))
   }
 
+  @Test("OpenClaude usage is attributed independently while reusing the Claude transcript format")
+  func openClaudeUsage() {
+    let synthetic =
+      #"{"type":"assistant","sessionId":"session_1","timestamp":"2026-07-12T01:02:01.000Z","message":{"id":"synthetic","model":"<synthetic>","usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}"#
+    let partial =
+      #"{"type":"assistant","sessionId":"session_1","timestamp":"2026-07-12T01:02:02.000Z","message":{"id":"msg_1","model":"gpt-test","usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}"#
+    let final =
+      #"{"type":"assistant","sessionId":"session_1","timestamp":"2026-07-12T01:02:03.000Z","message":{"id":"msg_1","model":"gpt-test","usage":{"input_tokens":12,"output_tokens":5,"cache_read_input_tokens":20,"cache_creation_input_tokens":3}}}"#
+
+    let result = ClaudeCodeParser(provider: .openClaude).parse(
+      Data("\(synthetic)\n\(partial)\n\(final)".utf8),
+      sourceID: "fixture"
+    )
+
+    #expect(result.events.count == 1)
+    #expect(result.events.first?.provider == .openClaude)
+    #expect(
+      result.events.first?.usage
+        == TokenUsage(input: 12, output: 5, cacheRead: 20, cacheWrite: 3, total: 40))
+    #expect(result.events.first?.model == ModelIdentity(tool: .openClaude, name: "gpt-test"))
+  }
+
   @Test("Codex cached input and reasoning are normalized into exclusive buckets")
   func codexUsage() {
     let context =

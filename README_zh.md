@@ -12,7 +12,7 @@
 
 ---
 
-Unsealed Spellbook 是一款私密、原生的 macOS 菜单栏应用，用于统计和分析 AI 工具与模型的 Token 使用情况。它汇总 Claude Code、Codex、Gemini CLI、Oh My Pi 和 OpenCode 的本地用量，并将数据转化为清晰的趋势、预估费用、模型排行和一套包含 60 枚徽章的成就系统。
+Unsealed Spellbook 是一款私密、原生的 macOS 菜单栏应用，用于统计和分析 AI 工具与模型的 Token 使用情况。它汇总 Claude Code、OpenClaude、Codex、Gemini CLI、Oh My Pi 和 OpenCode 的本地用量，并将数据转化为清晰的趋势、预估费用、模型排行和一套包含 60 枚徽章的成就系统。
 
 需要 macOS 14 或更高版本。应用界面支持简体中文、繁体中文和美式英语。
 
@@ -22,7 +22,7 @@ Unsealed Spellbook 是一款私密、原生的 macOS 菜单栏应用，用于统
 
 - 按今天、本周、最近 7 天、最近 30 天和本月五个本地日历周期，对比 Token 用量或预估美元费用。
 - 按工具、输入、输出和缓存活动拆分用量。
-- 查看 52 周活跃度方阵图，以及各受支持工具的按日趋势图。
+- 查看总体用量和各受支持工具的按日趋势图。
 - 按精确的模型标识和推理等级统计当天的模型排行，同时展示记录数和缓存命中率。
 - 无需将日志发送至服务器，即可追踪累计用量、活跃天数、连续使用天数和徽章进度。
 - 支持手动刷新或每 1、5、15 分钟自动刷新、开机启动、GitHub 新版本检查及浅色、深色外观切换。
@@ -34,22 +34,12 @@ Unsealed Spellbook 是一款私密、原生的 macOS 菜单栏应用，用于统
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/screenshots/overview-zh.png" alt="简体中文概览页面">
-      <br><strong>概览。</strong>按五个本地日历时间范围，对比总用量及各工具用量。
-    </td>
-    <td width="50%" valign="top">
       <img src="docs/screenshots/achievements-zh.png" alt="简体中文徽章页面">
       <br><strong>徽章。</strong>浏览钻石、黄金、白银和青铜四个等级的 57 枚可见徽章。
     </td>
-  </tr>
-  <tr>
     <td width="50%" valign="top">
       <img src="docs/screenshots/achievement-detail-zh.png" alt="简体中文徽章详情弹窗">
       <br><strong>徽章详情。</strong>查看解锁条件、当前进度和记录的解锁日期。
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/settings-zh.png" alt="简体中文设置页面">
-      <br><strong>设置。</strong>选择本地数据源、语言、刷新频率、版本检查、开机启动和菜单栏显示方式。
     </td>
   </tr>
 </table>
@@ -60,7 +50,7 @@ Unsealed Spellbook 是一款私密、原生的 macOS 菜单栏应用，用于统
 
 - Token 总用量或预估费用及各工具的占比；
 - 各工具的总量、输入、输出和缓存数据；
-- 每日活跃度方阵图和所选工具的趋势图；以及
+- 总体用量和所选工具的按日趋势图；以及
 - 当天的模型排行，其中模型名称和推理等级分别统计。
 
 “徽章”页面展示历史 Token 总量、活跃天数、当前连续使用天数和缓存命中率。徽章收藏按钻石、黄金、白银、青铜的顺序排列，并支持折叠。点击徽章可查看解锁条件、进度和解锁记录；新解锁的徽章会通过可关闭的轮播弹窗提示。
@@ -70,12 +60,15 @@ Unsealed Spellbook 是一款私密、原生的 macOS 菜单栏应用，用于统
 | 工具 | 默认位置 | 数据来源 |
 | --- | --- | --- |
 | Claude Code | `~/.claude/projects` | 递归读取 JSONL 会话日志 |
+| OpenClaude | `~/.openclaude/projects` | 递归读取 JSONL 会话日志 |
 | Codex | `~/.codex/sessions` | 递归读取 JSONL 会话日志 |
 | Gemini CLI | `~/.gemini/tmp`、`~/.gemini/gemini-cli/conversations` | JSONL 日志与旧版 JSON 会话 |
 | Oh My Pi | `~/.omp/agent/sessions` | 递归读取 JSONL 会话日志 |
 | OpenCode | `~/.local/share/opencode/opencode.db` | SQLite 数据库 |
 
 助手用量记录会被标准化为输入、输出、缓存读取、缓存写入、推理和 Token 总量。在数据可用时，应用还会保留工具、后端、准确模型名称和推理等级，用于聚合统计。
+
+OpenClaude 会话日志会提供准确模型名称和四类核心 Token，但不会记录所选后端或独立的推理 Token。因此，推理消耗仍计入输出，后端则保持未知。
 
 每个数据源都可以单独启用或停用。停用的数据源不会被扫描。
 

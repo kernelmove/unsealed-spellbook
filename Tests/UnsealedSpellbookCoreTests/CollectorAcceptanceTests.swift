@@ -42,6 +42,26 @@ struct CollectorAcceptanceTests {
     #expect(appended.diagnostics.bytesRead == final.utf8.count)
   }
 
+  @Test("OpenClaude session logs are collected from their own source")
+  func openClaudeCollection() async throws {
+    let fixture = try FixtureDirectory()
+    defer { fixture.remove() }
+    let logURL = fixture.openClaude.appendingPathComponent("session.jsonl")
+    let usage =
+      #"{"type":"assistant","sessionId":"session_1","timestamp":"2026-07-12T01:02:02Z","message":{"id":"msg_1","model":"gpt-test","usage":{"input_tokens":10,"output_tokens":2,"cache_read_input_tokens":5,"cache_creation_input_tokens":1}}}"#
+      + "\n"
+    try Data(usage.utf8).write(to: logURL)
+    let collector = LocalUsageCollector(locations: fixture.locations)
+
+    let result = await collector.collect(
+      interval: DateInterval(start: .distantPast, end: .distantFuture),
+      enabledProviders: [.openClaude]
+    )
+
+    #expect(result.snapshot.providers[.openClaude]?.total == 18)
+    #expect(result.events.first?.model == ModelIdentity(tool: .openClaude, name: "gpt-test"))
+  }
+
   @Test("An unchanged OpenCode database is queried once")
   func openCodeDatabaseCaching() async throws {
     let fixture = try FixtureDirectory()
@@ -177,15 +197,18 @@ struct CollectorAcceptanceTests {
   private struct FixtureDirectory {
     let root: URL
     let claude: URL
+    let openClaude: URL
     let codex: URL
     let openCodeDatabase: URL
 
     init() throws {
       root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
       claude = root.appendingPathComponent("claude")
+      openClaude = root.appendingPathComponent("openclaude")
       codex = root.appendingPathComponent("codex")
       openCodeDatabase = root.appendingPathComponent("opencode.db")
       try FileManager.default.createDirectory(at: claude, withIntermediateDirectories: true)
+      try FileManager.default.createDirectory(at: openClaude, withIntermediateDirectories: true)
       try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
     }
 
@@ -193,7 +216,8 @@ struct CollectorAcceptanceTests {
       LocalUsageLocations(
         claudeCodeDirectory: claude,
         codexDirectory: codex,
-        openCodeDatabase: openCodeDatabase
+        openCodeDatabase: openCodeDatabase,
+        openClaudeDirectory: openClaude
       )
     }
 

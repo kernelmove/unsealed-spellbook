@@ -5,6 +5,7 @@
 /output/
 /Design/qa*/
 /design-qa.md
+/.openclaude/
 
 .DS_Store
 *.dmg

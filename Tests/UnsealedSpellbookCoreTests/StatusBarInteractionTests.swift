@@ -16,7 +16,7 @@ struct StatusBarInteractionTests {
   @Test("Menu layout follows the selected design prototype")
   func prototypeLayout() {
     #expect(SpellbookDesign.windowSize == CGSize(width: 1040, height: 720))
-    #expect(SpellbookDesign.sidebarWidth == 330)
+    #expect(SpellbookDesign.minimumWindowSize == CGSize(width: 840, height: 620))
     #expect(DashboardPage.details.title(language: .simplifiedChinese) == "概览")
   }
 
@@ -29,53 +29,19 @@ struct StatusBarInteractionTests {
     )
   }
 
-  @Test("Daily heatmap anchors the selected range in a calendar grid")
-  func dailyHeatmapLayout() throws {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    calendar.firstWeekday = 2
-    let now = try #require(
-      calendar.date(from: DateComponents(year: 2026, month: 7, day: 12, hour: 12))
-    )
-    let analytics = UsageAnalytics(
-      events: [
-        UsageEvent(
-          id: "today",
-          provider: .codex,
-          timestamp: now,
-          usage: TokenUsage(input: 100, output: 0, total: 100),
-          model: .unknown
-        )
-      ],
-      now: now,
-      calendar: calendar
-    )
+  @Test("Saving data sources replaces the complete provider selection")
+  func providerPreferences() throws {
+    let suiteName = "UnsealedSpellbookTests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
 
-    let cells = DailyMetricHeatmapLayout.cells(
-      for: analytics.dailyUsage(for: .last7Days).map {
-        DailyMetric(day: $0.day, value: Double($0.usage.total))
-      },
-      now: now,
-      calendar: calendar
-    )
-    let today = try #require(cells.first { calendar.isDate($0.day, inSameDayAs: now) })
+    #expect(AppPreferences.enabledProviders(defaults: defaults) == Set(AIProvider.allCases))
 
-    #expect(
-      cells.count
-        == DailyMetricHeatmapLayout.columnCount * DailyMetricHeatmapLayout.rowCount
-    )
-    #expect(cells.count { $0.value != nil } == 7)
-    #expect(today.value == 100)
-    #expect(today.level == 4)
-    #expect(today.showsHoverDetail)
-    #expect(
-      !DailyMetricHeatmapCell(
-        day: now,
-        value: 100,
-        level: 4,
-        isFuture: true
-      ).showsHoverDetail
-    )
-    #expect(DailyMetricHeatmapLayout.intensityLevel(value: 10, maximum: 1_000) == 2)
+    AppPreferences.setEnabledProviders([.openClaude, .codex], defaults: defaults)
+    #expect(AppPreferences.enabledProviders(defaults: defaults) == [.openClaude, .codex])
+
+    AppPreferences.setEnabledProviders([], defaults: defaults)
+    #expect(AppPreferences.enabledProviders(defaults: defaults).isEmpty)
   }
+
 }

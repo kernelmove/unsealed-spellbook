@@ -30,15 +30,30 @@ struct DesignAcceptanceTests {
   @MainActor
   func designScreens() async throws {
     let previousLanguage = UserDefaults.standard.string(forKey: AppPreferences.languageKey)
+    let previousProviderValues = Dictionary(
+      uniqueKeysWithValues: AIProvider.allCases.compactMap { provider in
+        let key = AppPreferences.providerKey(provider)
+        return UserDefaults.standard.object(forKey: key).map { (key, $0) }
+      }
+    )
     UserDefaults.standard.set(
       snapshotLanguage.rawValue,
       forKey: AppPreferences.languageKey
     )
+    AppPreferences.setEnabledProviders(Set(AIProvider.allCases))
     defer {
       if let previousLanguage {
         UserDefaults.standard.set(previousLanguage, forKey: AppPreferences.languageKey)
       } else {
         UserDefaults.standard.removeObject(forKey: AppPreferences.languageKey)
+      }
+      for provider in AIProvider.allCases {
+        let key = AppPreferences.providerKey(provider)
+        if let value = previousProviderValues[key] {
+          UserDefaults.standard.set(value, forKey: key)
+        } else {
+          UserDefaults.standard.removeObject(forKey: key)
+        }
       }
     }
 
@@ -124,6 +139,63 @@ struct DesignAcceptanceTests {
         )
       ),
       (
+        "overview-filtered-light",
+        snapshot(
+          of: DetailDashboardView(
+            analytics: analytics,
+            pricingCatalog: pricingCatalog,
+            enabledProviders: [.codex]
+          ),
+          scheme: .light
+        )
+      ),
+      (
+        "overview-empty-light",
+        snapshot(
+          of: DetailDashboardView(
+            analytics: analytics,
+            pricingCatalog: pricingCatalog,
+            enabledProviders: []
+          ),
+          scheme: .light
+        )
+      ),
+      (
+        "overview-compact-light",
+        render(
+          store: store,
+          navigation: navigation,
+          page: .details,
+          scheme: .light,
+          size: SpellbookDesign.minimumWindowSize
+        )
+      ),
+      (
+        "overview-wide-light",
+        render(
+          store: store,
+          navigation: navigation,
+          page: .details,
+          scheme: .light,
+          size: CGSize(width: 1_280, height: 800)
+        )
+      ),
+      (
+        "tool-detail-light",
+        snapshot(
+          of: ToolDetailPanel(
+            analytics: largeCostAnalytics,
+            catalog: pricingCatalog,
+            providers: [.claudeCode, .openClaude, .codex, .ohMyPi, .openCode],
+            perspective: .tokens,
+            provider: .constant(.codex),
+            period: .last7Days
+          ),
+          scheme: .light,
+          size: CGSize(width: 982, height: 446)
+        )
+      ),
+      (
         "achievements-light",
         render(store: store, navigation: navigation, page: .achievements, scheme: .light)
       ),
@@ -188,7 +260,8 @@ struct DesignAcceptanceTests {
     store: UsageStore,
     navigation: DashboardNavigation,
     page: DashboardPage,
-    scheme: ColorScheme
+    scheme: ColorScheme,
+    size: CGSize = SpellbookDesign.windowSize
   ) -> NSImage? {
     navigation.selectedPage = page
     return snapshot(
@@ -197,7 +270,8 @@ struct DesignAcceptanceTests {
         updateStore: GitHubReleaseStore(currentVersion: "1.0.1"),
         navigation: navigation
       ),
-      scheme: scheme
+      scheme: scheme,
+      size: size
     )
   }
 
@@ -277,7 +351,8 @@ struct DesignAcceptanceTests {
   @MainActor
   private func snapshot<Content: View>(
     of content: Content,
-    scheme: ColorScheme
+    scheme: ColorScheme,
+    size: CGSize = SpellbookDesign.windowSize
   ) -> NSImage? {
     let view = NSHostingView(
       rootView:
@@ -287,14 +362,14 @@ struct DesignAcceptanceTests {
         .preferredColorScheme(scheme)
     )
     view.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
-    view.frame = NSRect(origin: .zero, size: SpellbookDesign.windowSize)
+    view.frame = NSRect(origin: .zero, size: size)
     view.layoutSubtreeIfNeeded()
 
     guard let representation = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
       return nil
     }
     view.cacheDisplay(in: view.bounds, to: representation)
-    let image = NSImage(size: SpellbookDesign.windowSize)
+    let image = NSImage(size: size)
     image.addRepresentation(representation)
     return image
   }

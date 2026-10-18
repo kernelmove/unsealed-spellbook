@@ -321,7 +321,7 @@ private struct TierAchievementCollection: View {
         }
         .contentShape(Rectangle())
       }
-      .buttonStyle(.plain)
+      .buttonStyle(SpellbookPressButtonStyle())
       .padding(14)
       .accessibilityLabel(
         language.text(
@@ -380,7 +380,7 @@ private struct SummaryMetric: View {
     .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
     .padding(14)
     .background(
-      SpellbookDesign.surface,
+      SpellbookDesign.surfaceSoft,
       in: RoundedRectangle(cornerRadius: 12, style: .continuous)
     )
     .overlay {
@@ -443,14 +443,14 @@ private struct AchievementCard: View {
       }
       .padding(14)
       .frame(maxWidth: .infinity, minHeight: 152, alignment: .center)
-      .background(SpellbookDesign.surface, in: RoundedRectangle(cornerRadius: 14))
+      .background(SpellbookDesign.surfaceSoft, in: RoundedRectangle(cornerRadius: 14))
       .overlay {
         RoundedRectangle(cornerRadius: 14)
           .stroke(SpellbookDesign.line, lineWidth: 1)
       }
       .contentShape(RoundedRectangle(cornerRadius: 14))
     }
-    .buttonStyle(.plain)
+    .buttonStyle(SpellbookPressButtonStyle())
     .help(
       language.text(
         .viewAchievementDetailsFormat,
@@ -748,7 +748,7 @@ struct NewAchievementModal: View {
             .frame(maxWidth: .infinity, minHeight: 34)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SpellbookPressButtonStyle())
         .foregroundStyle(.white)
         .background(SpellbookDesign.accent, in: Capsule())
         .accessibilityLabel(language.text(.accessibilityAcceptNewAchievement))
@@ -774,7 +774,7 @@ struct NewAchievementModal: View {
           .frame(width: 34, height: 34)
           .contentShape(Circle())
       }
-      .buttonStyle(.plain)
+      .buttonStyle(SpellbookPressButtonStyle())
       .foregroundStyle(.white)
       .background(Color.black.opacity(0.28), in: Circle())
       .overlay { Circle().stroke(Color.white.opacity(0.9), lineWidth: 1.5) }
@@ -823,7 +823,7 @@ private struct AchievementPageDots: View {
             .frame(width: 18, height: 18)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SpellbookPressButtonStyle())
         .accessibilityLabel(
           language.text(
             .achievementPageFormat,

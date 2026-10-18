@@ -5,39 +5,45 @@ import UnsealedSpellbookLanguage
 
 enum SpellbookDesign {
   static let windowSize = CGSize(width: 1040, height: 720)
+  static let minimumWindowSize = CGSize(width: 840, height: 620)
   static let toolbarHeight: CGFloat = 58
-  static let sidebarWidth: CGFloat = 330
   static let spacing: CGFloat = 12
   static let panelRadius: CGFloat = 14
 
-  static let background = dynamicColor(light: 0xF5F5F7, dark: 0x101014)
-  static let surface = dynamicColor(light: 0xFFFFFF, dark: 0x1C1C20)
-  static let surfaceSoft = dynamicColor(light: 0xECECEE, dark: 0x141418)
-  static let toolbar = dynamicColor(
-    light: 0xFAFAFC,
-    dark: 0x1E1E22,
-    lightAlpha: 0.88,
-    darkAlpha: 0.90
-  )
+  static let background = dynamicColor(light: 0xF4F3F8, dark: 0x0F0F14)
+  static let surface = dynamicColor(light: 0xFFFFFF, dark: 0x222129)
+  static let surfaceSoft = dynamicColor(light: 0xECEEF3, dark: 0x18171F)
   static let line = dynamicColor(
-    light: 0x3C3C43,
-    dark: 0xEBEBF5,
-    lightAlpha: 0.14,
-    darkAlpha: 0.14
-  )
-  static let accent = dynamicColor(light: 0x5856D6, dark: 0x8F8CFF)
-  static let muted = dynamicColor(light: 0x6E6E73, dark: 0xA1A1A6)
-  static let track = dynamicColor(light: 0xE8E8EB, dark: 0x34343A)
-  static let iconBackground = dynamicColor(light: 0xF4F4F6, dark: 0x2A2A30)
-  static let segmentedBackground = dynamicColor(
-    light: 0x767680,
-    dark: 0x767680,
+    light: 0x3A3850,
+    dark: 0xF0EEFF,
     lightAlpha: 0.16,
     darkAlpha: 0.16
   )
-  static let success = dynamicColor(light: 0x28A745, dark: 0x4BD166)
-  static let metricBlue = dynamicColor(light: 0x4C8EE8, dark: 0x6EA6F2)
-  static let metricPurple = dynamicColor(light: 0xAF52DE, dark: 0xC879EC)
+  static let panelShadow = dynamicColor(
+    light: 0x25223B,
+    dark: 0x000000,
+    lightAlpha: 0.08,
+    darkAlpha: 0.28
+  )
+  static let accent = dynamicColor(light: 0x5754C7, dark: 0xA4A1FF)
+  static let muted = dynamicColor(light: 0x706E78, dark: 0xAAA8B3)
+  static let track = dynamicColor(light: 0xE6E4EC, dark: 0x36343E)
+  static let iconBackground = dynamicColor(light: 0xF0EFF5, dark: 0x2C2A34)
+  static let segmentedBackground = dynamicColor(
+    light: 0x6F6C7B,
+    dark: 0x9B97AA,
+    lightAlpha: 0.13,
+    darkAlpha: 0.18
+  )
+  static let segmentSelection = dynamicColor(
+    light: 0xFFFFFF,
+    dark: 0x474451,
+    lightAlpha: 0.94,
+    darkAlpha: 0.86
+  )
+  static let success = dynamicColor(light: 0x2F8D55, dark: 0x63C982)
+  static let metricBlue = dynamicColor(light: 0x397CCB, dark: 0x72A7E5)
+  static let metricPurple = dynamicColor(light: 0x9257C8, dark: 0xC18AE5)
 }
 
 private func dynamicColor(
@@ -69,6 +75,7 @@ extension AIProvider {
   var displayName: String {
     switch self {
     case .claudeCode: "Claude Code"
+    case .openClaude: "OpenClaude"
     case .codex: "Codex"
     case .ohMyPi: "Oh My Pi"
     case .openCode: "OpenCode"
@@ -79,6 +86,7 @@ extension AIProvider {
   var systemImage: String {
     switch self {
     case .claudeCode: "brain.head.profile"
+    case .openClaude: "command.circle"
     case .codex: "terminal"
     case .ohMyPi: "circle.hexagongrid"
     case .openCode: "chevron.left.forwardslash.chevron.right"
@@ -88,12 +96,34 @@ extension AIProvider {
 
   var tintColor: Color {
     switch self {
-    case .claudeCode: Color(red: 1, green: 0.48, blue: 0.10)
-    case .codex: SpellbookDesign.accent
-    case .ohMyPi: Color(red: 0.12, green: 0.71, blue: 0.65)
-    case .openCode: Color(red: 0.09, green: 0.55, blue: 0.82)
-    case .geminiCLI: Color(red: 0.22, green: 0.55, blue: 0.94)
+    case .claudeCode: Color(red: 0.85, green: 0.47, blue: 0.34)
+    case .openClaude: Color(red: 1, green: 0.48, blue: 0.10)
+    case .codex: Color(red: 0.36, green: 0.36, blue: 0.90)
+    case .geminiCLI: Color(red: 0.18, green: 0.53, blue: 0.95)
+    case .ohMyPi: Color(red: 0.98, green: 0.45, blue: 0.09)
+    case .openCode:
+      dynamicColor(light: 0x5D5D64, dark: 0xC6C6CC)
     }
+  }
+}
+
+struct ProviderIcon: View {
+  let provider: AIProvider
+  let size: CGFloat
+
+  init(_ provider: AIProvider, size: CGFloat = 24) {
+    self.provider = provider
+    self.size = size
+  }
+
+  var body: some View {
+    Image(systemName: provider.systemImage)
+      .font(.system(size: size * 0.52, weight: .semibold))
+      .foregroundStyle(provider.tintColor)
+      .frame(width: size, height: size)
+      .background(SpellbookDesign.iconBackground)
+      .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+      .accessibilityHidden(true)
   }
 }
 
@@ -228,7 +258,21 @@ extension View {
       RoundedRectangle(cornerRadius: radius, style: .continuous)
         .stroke(SpellbookDesign.line, lineWidth: 1)
     }
-    .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+    .shadow(color: SpellbookDesign.panelShadow, radius: 4, y: 1)
+  }
+}
+
+struct SpellbookPressButtonStyle: ButtonStyle {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .opacity(configuration.isPressed ? 0.72 : 1)
+      .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+      .animation(
+        reduceMotion ? nil : .easeOut(duration: 0.10),
+        value: configuration.isPressed
+      )
   }
 }
 
@@ -237,32 +281,46 @@ struct SpellbookSegmentedControl<Option: Hashable>: View {
   @Binding var selection: Option
   var horizontalPadding: CGFloat = 14
   let title: (Option) -> String
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Namespace private var selectionIndicator
+  @State private var hoveredOption: Option?
 
   var body: some View {
     HStack(spacing: 0) {
       ForEach(options, id: \.self) { option in
         Button {
-          selection = option
+          withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 1)) {
+            selection = option
+          }
         } label: {
           Text(title(option))
+            .fontWeight(selection == option ? .semibold : .regular)
             .lineLimit(1)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, horizontalPadding)
             .frame(minHeight: 28)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SpellbookPressButtonStyle())
         .foregroundStyle(selection == option ? Color.primary : Color.secondary)
         .background {
           if selection == option {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-              .fill(SpellbookDesign.surface)
-              .shadow(color: .black.opacity(0.14), radius: 3, y: 1)
+              .fill(SpellbookDesign.segmentSelection)
+              .shadow(color: SpellbookDesign.panelShadow, radius: 4, y: 1)
+              .matchedGeometryEffect(id: "selection", in: selectionIndicator)
+          } else if hoveredOption == option {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+              .fill(Color.primary.opacity(0.055))
           }
+        }
+        .onHover { isHovering in
+          hoveredOption = isHovering ? option : (hoveredOption == option ? nil : hoveredOption)
         }
         .accessibilityAddTraits(selection == option ? .isSelected : [])
       }
     }
+    .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hoveredOption)
     .padding(3)
     .background(
       SpellbookDesign.segmentedBackground,

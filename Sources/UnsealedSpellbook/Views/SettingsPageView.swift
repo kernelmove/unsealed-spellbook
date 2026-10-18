@@ -9,11 +9,8 @@ struct SettingsPageView: View {
   let updateStore: GitHubReleaseStore
   @Environment(\.appLanguage) private var language
 
-  @AppStorage(AppPreferences.providerKey(.claudeCode)) private var claudeEnabled = true
-  @AppStorage(AppPreferences.providerKey(.codex)) private var codexEnabled = true
-  @AppStorage(AppPreferences.providerKey(.geminiCLI)) private var geminiEnabled = true
-  @AppStorage(AppPreferences.providerKey(.ohMyPi)) private var ohMyPiEnabled = true
-  @AppStorage(AppPreferences.providerKey(.openCode)) private var openCodeEnabled = true
+  @State private var draftProviders = AppPreferences.enabledProviders()
+  @State private var savedProviders = AppPreferences.enabledProviders()
   @AppStorage(AppPreferences.refreshIntervalKey) private var refreshInterval = 300.0
   @AppStorage(AppPreferences.showMenuBarTotalKey) private var showMenuBarTotal = true
   @AppStorage(AppPreferences.automaticallyCheckForUpdatesKey) private
@@ -47,11 +44,6 @@ struct SettingsPageView: View {
       .padding(SpellbookDesign.spacing)
     }
     .background(SpellbookDesign.surfaceSoft)
-    .onChange(of: claudeEnabled) { refreshAfterSettingsChange() }
-    .onChange(of: codexEnabled) { refreshAfterSettingsChange() }
-    .onChange(of: geminiEnabled) { refreshAfterSettingsChange() }
-    .onChange(of: ohMyPiEnabled) { refreshAfterSettingsChange() }
-    .onChange(of: openCodeEnabled) { refreshAfterSettingsChange() }
   }
 
   private var pageHeader: some View {
@@ -68,11 +60,20 @@ struct SettingsPageView: View {
 
   private var sourceSettings: some View {
     settingsCard(language.text(.settingsDataSources), systemImage: "externaldrive") {
-      providerToggle(.claudeCode, isOn: $claudeEnabled)
-      providerToggle(.codex, isOn: $codexEnabled)
-      providerToggle(.geminiCLI, isOn: $geminiEnabled)
-      providerToggle(.ohMyPi, isOn: $ohMyPiEnabled)
-      providerToggle(.openCode, isOn: $openCodeEnabled)
+      ForEach(AIProvider.allCases, id: \.rawValue) { provider in
+        providerToggle(provider, isOn: providerBinding(provider))
+      }
+
+      HStack {
+        Spacer()
+        Button(language.text(.settingsSave)) {
+          AppPreferences.setEnabledProviders(draftProviders)
+          savedProviders = draftProviders
+          Task { await store.refresh() }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(draftProviders == savedProviders)
+      }
     }
   }
 
@@ -126,6 +127,9 @@ struct SettingsPageView: View {
   private var privacySettings: some View {
     settingsCard(language.text(.settingsLocalData), systemImage: "lock.shield") {
       sourcePath("Claude Code", LocalUsageLocations.standard.claudeCodeDirectory)
+      if let directory = LocalUsageLocations.standard.openClaudeDirectory {
+        sourcePath("OpenClaude", directory)
+      }
       sourcePath("Codex", LocalUsageLocations.standard.codexDirectory)
       ForEach(
         Array(LocalUsageLocations.standard.geminiCLIDirectories.enumerated()),
@@ -257,10 +261,26 @@ struct SettingsPageView: View {
 
   private func providerToggle(_ provider: AIProvider, isOn: Binding<Bool>) -> some View {
     Toggle(isOn: isOn) {
-      Label(provider.displayName, systemImage: provider.systemImage)
-        .foregroundStyle(provider.tintColor)
+      HStack(spacing: 9) {
+        ProviderIcon(provider, size: 24)
+        Text(provider.displayName)
+          .font(.subheadline.weight(.medium))
+      }
     }
     .tint(provider.tintColor)
+  }
+
+  private func providerBinding(_ provider: AIProvider) -> Binding<Bool> {
+    Binding(
+      get: { draftProviders.contains(provider) },
+      set: { isEnabled in
+        if isEnabled {
+          draftProviders.insert(provider)
+        } else {
+          draftProviders.remove(provider)
+        }
+      }
+    )
   }
 
   private func sourcePath(_ name: String, _ url: URL) -> some View {
@@ -288,10 +308,6 @@ struct SettingsPageView: View {
     .padding(16)
     .frame(maxWidth: .infinity, alignment: .leading)
     .spellbookPanel()
-  }
-
-  private func refreshAfterSettingsChange() {
-    Task { await store.refresh() }
   }
 
   private func updateLaunchAtLogin(_ enabled: Bool) {

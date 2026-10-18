@@ -2,6 +2,7 @@ import Foundation
 
 public struct LocalUsageLocations: Sendable {
   public let claudeCodeDirectory: URL
+  public let openClaudeDirectory: URL?
   public let codexDirectory: URL
   public let geminiCLIDirectories: [URL]
   public let ohMyPiDirectory: URL?
@@ -12,9 +13,11 @@ public struct LocalUsageLocations: Sendable {
     codexDirectory: URL,
     geminiCLIDirectories: [URL] = [],
     ohMyPiDirectory: URL? = nil,
-    openCodeDatabase: URL
+    openCodeDatabase: URL,
+    openClaudeDirectory: URL? = nil
   ) {
     self.claudeCodeDirectory = claudeCodeDirectory
+    self.openClaudeDirectory = openClaudeDirectory
     self.codexDirectory = codexDirectory
     self.geminiCLIDirectories = geminiCLIDirectories
     self.ohMyPiDirectory = ohMyPiDirectory
@@ -31,7 +34,8 @@ public struct LocalUsageLocations: Sendable {
         home.appendingPathComponent(".gemini/gemini-cli/conversations"),
       ],
       ohMyPiDirectory: home.appendingPathComponent(".omp/agent/sessions"),
-      openCodeDatabase: home.appendingPathComponent(".local/share/opencode/opencode.db")
+      openCodeDatabase: home.appendingPathComponent(".local/share/opencode/opencode.db"),
+      openClaudeDirectory: home.appendingPathComponent(".openclaude/projects")
     )
   }
 }
@@ -77,6 +81,14 @@ public actor LocalUsageCollector {
         parser: CodexParser()
       ),
     ]
+    if let directory = locations.openClaudeDirectory {
+      sources.append(
+        JSONLSource(
+          provider: .openClaude,
+          directory: directory,
+          parser: ClaudeCodeParser(provider: .openClaude)
+        ))
+    }
     if let directory = locations.ohMyPiDirectory {
       sources.append(
         JSONLSource(

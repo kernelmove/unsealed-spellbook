@@ -327,7 +327,15 @@ public struct GeminiCLIParser: UsageLogParser {
 }
 
 public struct ClaudeCodeParser: UsageLogParser {
-  public init() {}
+  private let provider: AIProvider
+
+  public init() {
+    provider = .claudeCode
+  }
+
+  init(provider: AIProvider) {
+    self.provider = provider
+  }
 
   public func parse(
     _ data: Data,
@@ -355,16 +363,17 @@ public struct ClaudeCodeParser: UsageLogParser {
         rejected += 1
         continue
       }
+      guard message["model"] as? String != "<synthetic>" else { continue }
 
       let id = "\(sessionID):\(messageID)"
       if latest[id] == nil { order.append(id) }
       let model =
         (message["model"] as? String).map {
-          ModelIdentity(tool: .claudeCode, name: $0)
-        } ?? .unknown(tool: .claudeCode)
+          ModelIdentity(tool: provider, name: $0)
+        } ?? .unknown(tool: provider)
       latest[id] = UsageEvent(
         id: id,
-        provider: .claudeCode,
+        provider: provider,
         timestamp: timestamp,
         usage: TokenUsage(
           input: input,

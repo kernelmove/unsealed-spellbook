@@ -12,7 +12,7 @@
 
 ---
 
-Unsealed Spellbook is a private, native macOS Token analytics tool for AI tools and models. Its menu-bar dashboard combines usage from Claude Code, Codex, Gemini CLI, Oh My Pi and OpenCode, then turns it into clear trends, estimated costs, model rankings and a 60-badge achievement system.
+Unsealed Spellbook is a private, native macOS Token analytics tool for AI tools and models. Its menu-bar dashboard combines usage from Claude Code, OpenClaude, Codex, Gemini CLI, Oh My Pi and OpenCode, then turns it into clear trends, estimated costs, model rankings and a 60-badge achievement system.
 
 Requires macOS 14 or later.
 
@@ -22,7 +22,7 @@ Requires macOS 14 or later.
 
 - Compare Token usage or estimated USD cost across five local-calendar periods: Today, This Week, Last 7 Days, Last 30 Days and This Month.
 - Break usage down by tool, input, output and cache activity.
-- Explore a 52-week activity grid and a daily trend chart for each supported tool.
+- Explore daily trend charts for total usage and each supported tool.
 - Rank today's models by exact model identity and reasoning variant, with record counts and cache hit rates.
 - Track all-time activity, streaks and badge progress without sending logs to a server.
 - Refresh manually or every 1, 5 or 15 minutes, launch at login, check GitHub for new releases, and switch between light and dark appearances.
@@ -34,22 +34,12 @@ Left-click the menu-bar wand to open or close the dashboard. Right-click it to o
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/screenshots/overview-en.png" alt="Overview screen in English">
-      <br><strong>Overview.</strong> Compare total and per-tool usage across five local-calendar time ranges.
-    </td>
-    <td width="50%" valign="top">
       <img src="docs/screenshots/achievements-en.png" alt="Achievements screen in English">
       <br><strong>Achievements.</strong> Browse the 57 visible badges across Diamond, Gold, Silver and Bronze tiers.
     </td>
-  </tr>
-  <tr>
     <td width="50%" valign="top">
       <img src="docs/screenshots/achievement-detail-en.png" alt="Badge detail popover in English">
       <br><strong>Badge details.</strong> Inspect the requirement, current progress and recorded unlock date.
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/settings-en.png" alt="Settings screen in English">
-      <br><strong>Settings.</strong> Choose local sources, language, refresh cadence, release checks, login behaviour and menu-bar display.
     </td>
   </tr>
 </table>
@@ -60,7 +50,7 @@ The Overview presents:
 
 - total usage or estimated cost and each tool's contribution;
 - per-tool Total, Input, Output and Cache figures;
-- a daily activity heat map and selected-tool trend chart; and
+- a daily trend chart for total usage and the selected tool; and
 - today's model ranking, keeping model names and reasoning variants separate.
 
 The Achievements page presents all-time Total Tokens, Active Days, Current Streak and Cache Hit Rate. Badge collections are ordered from Diamond to Bronze and can be collapsed. Selecting a badge opens its requirement, progress and unlock record; newly unlocked badges are announced in a dismissible carousel.
@@ -70,12 +60,15 @@ The Achievements page presents all-time Total Tokens, Active Days, Current Strea
 | Tool | Default location | Source |
 | --- | --- | --- |
 | Claude Code | `~/.claude/projects` | Recursive JSONL session logs |
+| OpenClaude | `~/.openclaude/projects` | Recursive JSONL session logs |
 | Codex | `~/.codex/sessions` | Recursive JSONL session logs |
 | Gemini CLI | `~/.gemini/tmp`, `~/.gemini/gemini-cli/conversations` | JSONL journals and legacy JSON sessions |
 | Oh My Pi | `~/.omp/agent/sessions` | Recursive JSONL session logs |
 | OpenCode | `~/.local/share/opencode/opencode.db` | SQLite database |
 
 Assistant usage records are normalised into input, output, cache-read, cache-write, reasoning and total Token figures. Where available, the app also retains the tool, backend, exact model name and reasoning variant for aggregation.
+
+OpenClaude transcripts expose the exact model and four core Token buckets, but not the selected backend or a separate reasoning count. Reasoning therefore remains included in output, and the backend remains unknown.
 
 Each source can be enabled or disabled independently. Disabled sources are not scanned.
 

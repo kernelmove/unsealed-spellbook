@@ -25,6 +25,15 @@ enum AppPreferences {
       })
   }
 
+  static func setEnabledProviders(
+    _ providers: Set<AIProvider>,
+    defaults: UserDefaults = .standard
+  ) {
+    for provider in AIProvider.allCases {
+      defaults.set(providers.contains(provider), forKey: providerKey(provider))
+    }
+  }
+
   static func refreshInterval(defaults: UserDefaults = .standard) -> Duration {
     let seconds = defaults.object(forKey: refreshIntervalKey) as? Double ?? 300
     guard [60.0, 300.0, 900.0].contains(seconds) else { return .seconds(60) }

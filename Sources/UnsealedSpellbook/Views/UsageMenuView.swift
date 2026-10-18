@@ -14,16 +14,35 @@ struct UsageMenuView: View {
   let updateStore: GitHubReleaseStore
   @Bindable var navigation: DashboardNavigation
   @Environment(\.appLanguage) private var language
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
   @State private var preferredColorScheme: ColorScheme?
 
   var body: some View {
     VStack(spacing: 0) {
       navigationBar
-      Divider()
       pageContent
+        .id(navigation.selectedPage)
+        .transition(
+          reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .scale(scale: 0.99, anchor: .top))
+        )
     }
-    .frame(width: SpellbookDesign.windowSize.width, height: SpellbookDesign.windowSize.height)
+    .animation(
+      reduceMotion
+        ? .easeOut(duration: 0.12)
+        : .spring(response: 0.34, dampingFraction: 1),
+      value: navigation.selectedPage
+    )
+    .frame(
+      minWidth: SpellbookDesign.minimumWindowSize.width,
+      idealWidth: SpellbookDesign.windowSize.width,
+      maxWidth: .infinity,
+      minHeight: SpellbookDesign.minimumWindowSize.height,
+      idealHeight: SpellbookDesign.windowSize.height,
+      maxHeight: .infinity
+    )
     .background(SpellbookDesign.background)
     .tint(SpellbookDesign.accent)
     .preferredColorScheme(preferredColorScheme)
@@ -43,11 +62,12 @@ struct UsageMenuView: View {
         HStack(spacing: 8) {
           Image(systemName: "sparkles")
             .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(SpellbookDesign.accent)
           Text("Unsealed Spellbook")
             .font(.system(size: 16, weight: .semibold, design: .serif))
             .tracking(-0.32)
+            .foregroundStyle(.primary)
         }
-        .foregroundStyle(SpellbookDesign.accent)
 
         Spacer(minLength: 0)
 
@@ -86,7 +106,7 @@ struct UsageMenuView: View {
           .help(language.text(.actionQuit))
           .accessibilityLabel(language.text(.actionQuit))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(SpellbookPressButtonStyle())
         .foregroundStyle(.secondary)
         .font(.system(size: 15))
         .controlSize(.small)
@@ -94,7 +114,11 @@ struct UsageMenuView: View {
       .padding(.horizontal, 18)
     }
     .frame(height: SpellbookDesign.toolbarHeight)
-    .background(SpellbookDesign.toolbar)
+    .background(SpellbookDesign.surface)
+    .overlay(alignment: .bottom) {
+      Divider().overlay(SpellbookDesign.line)
+    }
+    .zIndex(1)
   }
 
   private var effectiveColorScheme: ColorScheme {
@@ -114,7 +138,11 @@ struct UsageMenuView: View {
       SettingsPageView(store: store, updateStore: updateStore)
     case .details:
       if let analytics = store.analytics {
-        DetailDashboardView(analytics: analytics, pricingCatalog: store.pricingCatalog)
+        DetailDashboardView(
+          analytics: analytics,
+          pricingCatalog: store.pricingCatalog,
+          enabledProviders: AppPreferences.enabledProviders()
+        )
       } else {
         loadingView
       }

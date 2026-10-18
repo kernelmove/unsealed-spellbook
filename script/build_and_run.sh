@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="UnsealedSpellbook"
-BUNDLE_ID="com.unsealed-spellbook.app"
+BUNDLE_ID="com.kernelmove.unsealedspellbook"
 MIN_SYSTEM_VERSION="14.0"
 APP_VERSION="${APP_VERSION:-1.0.1}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
